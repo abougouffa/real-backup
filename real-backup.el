@@ -1,4 +1,4 @@
-;;; real-backup.el --- Real Backup, make a copy at each savepoint of a file
+;;; real-backup.el --- Real Backup: make a copy at each savepoint of a file
 
 ;; Copyright (C) 2004  Benjamin RUTT
 ;; Copyright (C) 2024  Abdelhak BOUGOUFFA

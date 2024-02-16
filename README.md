@@ -1,6 +1,6 @@
 <img src="https://www.gnu.org/software/emacs/images/emacs.png" alt="Emacs Logo" width="80" height="80" align="right">
 ## real-backup.el
-*Real Backup, make a copy at each savepoint of a file*
+*Real Backup: make a copy at each savepoint of a file*
 
 ---
 
