@@ -118,11 +118,11 @@ on size."
   :group 'real-backup
   :type 'string)
 
-(defconst real-backup-time-format "%Y-%m-%d-%H-%M-%S"
+(defconst real-backup--time-format "%Y-%m-%d-%H-%M-%S"
   "Format given to `format-time-string' which is appended to the filename.")
 
-(defconst real-backup-time-match-regexp "[[:digit:]]\\{4\\}\\(-[[:digit:]]\\{2\\}\\)\\{5\\}"
-  "A regexp that matches `real-backup-time-format'.")
+(defconst real-backup--time-match-regexp "[[:digit:]]\\{4\\}\\(-[[:digit:]]\\{2\\}\\)\\{5\\}"
+  "A regexp that matches `real-backup--time-format'.")
 
 (defun real-backup ()
   "Perform a backup of the current file if needed."
@@ -150,7 +150,7 @@ When UNIQUE is provided, add a unique timestamp after the file name."
          (user (or (file-remote-p filename 'user) user-real-login-name))
          (containing-dir (file-name-directory localname))
          (backup-dir (funcall #'file-name-concat real-backup-directory method host user containing-dir))
-         (backup-basename (format "%s%s" (file-name-nondirectory localname) (if unique (concat "#" (format-time-string real-backup-time-format)) ""))))
+         (backup-basename (format "%s%s" (file-name-nondirectory localname) (if unique (concat "#" (format-time-string real-backup--time-format)) ""))))
     (when (not (file-exists-p backup-dir))
       (make-directory backup-dir t))
     (expand-file-name backup-basename backup-dir)))
@@ -159,7 +159,11 @@ When UNIQUE is provided, add a unique timestamp after the file name."
   "List of backups for FILENAME."
   (let* ((backup-filename (real-backup-compute-location filename))
          (backup-dir (file-name-directory backup-filename)))
-    (directory-files backup-dir nil (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup-time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
+    (directory-files backup-dir nil (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
+
+(defun real-backup--format-as-date (orig-name backup-name)
+  (let ((timestamp (file-name-sans-extension (string-remove-prefix (concat (file-name-nondirectory orig-name) "#") backup-name))))
+    (cons (apply (apply-partially #'format "%s-%s-%s %s:%s:%s") (string-split timestamp "-")) backup-name)))
 
 ;;;###autoload
 (defun real-backup-cleanup (filename)
@@ -182,10 +186,8 @@ When UNIQUE is provided, add a unique timestamp after the file name."
     (let* ((current-major-mode major-mode)
            (default-dir default-directory)
            (backup-dir (file-name-directory (real-backup-compute-location filename)))
-           (completion-extra-properties
-            `(:annotation-function
-              ,(lambda (bak) (format "   [%s bytes]" (file-attribute-size (file-attributes (expand-file-name bak backup-dir)))))))
-           (backup-file (completing-read "Select file: " (real-backup-backups-of-file buffer-file-name))))
+           (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename) (real-backup-backups-of-file filename)))
+           (backup-file (alist-get (completing-read "Select file: " (mapcar #'car backup-files)) backup-files nil nil #'equal)))
       (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
         ;; Apply the same major mode and the same default directory as the original file
         (funcall current-major-mode)
