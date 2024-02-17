@@ -11,7 +11,7 @@
 
 ;;; Commentary:
 
-;; This is a fork and reviving of `backup-each-save'.
+;; This is a fork and reviving of [`backup-each-save'](https://www.emacswiki.org/emacs/BackupEachSave).
 
 ;; Ever wish to go back to an older saved version of a file?  Then
 ;; this package is for you.  This package copies every file you save
