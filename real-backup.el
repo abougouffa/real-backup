@@ -105,6 +105,11 @@ on size."
   :group 'real-backup
   :type 'boolean)
 
+(defcustom real-backup-show-header t
+  "Show a header when vienwing a backup file."
+  :group 'real-backup
+  :type 'boolean)
+
 (defcustom real-backup-compress t
   "Compress the backup files."
   :group 'real-backup
@@ -118,7 +123,7 @@ on size."
 (defcustom real-backup-compression-program-args (when (executable-find "zstd") "--rm")
   "Extra arguments to pass to `real-backup-compression-program'."
   :group 'real-backup
-  :type 'string)
+  :type '(choice string (symbol nil)))
 
 (defconst real-backup--time-format "%Y-%m-%d-%H-%M-%S"
   "Format given to `format-time-string' which is appended to the filename.")
@@ -135,11 +140,10 @@ on size."
                (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit)))
       (copy-file filename backup-filename t t t)
       (when real-backup-compress
-        (let ((default-directory (file-name-directory backup-filename))
-              (file (file-name-nondirectory backup-filename)))
+        (let ((default-directory (file-name-directory backup-filename)))
           (start-process-shell-command
            "real-backup-compress" nil
-           (concat real-backup-compression-program " " real-backup-compression-program-args " " file))))
+           (concat real-backup-compression-program " " real-backup-compression-program-args " " (file-name-nondirectory backup-filename)))))
       (when real-backup-auto-cleanup (real-backup-cleanup filename)))))
 
 (defun real-backup-compute-location (filename &optional unique)
@@ -198,6 +202,10 @@ When UNIQUE is provided, add a unique timestamp after the file name."
         ;; Apply the same major mode and the same default directory as the original file
         (funcall current-major-mode)
         (setq-local default-directory default-dir)
+        (when real-backup-show-header
+          (setq header-line-format
+                (propertize (format "--- Real Backup of file %s @ %s %%-" (file-name-nondirectory filename) (car (real-backup--format-as-date filename backup-file)))
+                            'face 'warning)))
         (read-only-mode 1)))))
 
 ;;;###autoload
