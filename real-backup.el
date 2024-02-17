@@ -1,11 +1,13 @@
-;;; real-backup.el --- Real Backup: make a copy at each savepoint of a file
+;;; real-backup.el --- Make a copy at each savepoint of a file
 
-;; Copyright (C) 2004  Benjamin RUTT
-;; Copyright (C) 2024  Abdelhak BOUGOUFFA
+;; Copyright (C) 2004  Benjamin RUTT (rot13 "oehgg@oybbzvatgba.va.hf")
+;; Copyright (C) 2024  Abdelhak BOUGOUFFA (rot13 "nobhtbhssn@srqbencebwrpg.bet")
 
 ;; Author: Abdelhak BOUGOUFFA
-
+;; Maintainer: Abdelhak BOUGOUFFA
+;; Keywords: files, convenience
 ;; Version: 3.1
+;; URL: https://github.com/abougouffa/real-backup
 
 ;;; Commentary:
 
