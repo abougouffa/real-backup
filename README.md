@@ -90,6 +90,10 @@ Number of copies to keep for each file in `real-backup-cleanup`.
 
 Automatically cleanup after making a backup.
 
+#### `real-backup-show-header`
+
+Show a header when vienwing a backup file.
+
 #### `real-backup-compress`
 
 Compress the backup files.
