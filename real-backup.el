@@ -151,6 +151,10 @@ When UNIQUE is provided, add a unique timestamp after the file name."
          (host (or (file-remote-p filename 'host) "localhost"))
          (user (or (file-remote-p filename 'user) user-real-login-name))
          (containing-dir (file-name-directory localname))
+         ;; Better handling of Windows paths
+         (containing-dir (if (string-match "^\\([[:alpha:]]\\):\\([/\\].*\\)$" containing-dir) ;; C:/path/to/file -> real-backup/location/C/path/to/file
+                             (concat (upcase (match-string 1 containing-dir)) (match-string 2 containing-dir))
+                           containing-dir))
          (backup-dir (funcall #'file-name-concat real-backup-directory method host user containing-dir))
          (backup-basename (format "%s%s" (file-name-nondirectory localname) (if unique (concat "#" (format-time-string real-backup--time-format)) ""))))
     (when (not (file-exists-p backup-dir))
