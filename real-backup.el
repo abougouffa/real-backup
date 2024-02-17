@@ -93,7 +93,7 @@ If a file is greater than this size, don't make a backup of it.
 Setting this variable to nil disables backup suppressions based
 on size."
   :group 'real-backup
-  :type 'natnum)
+  :type '(choice natnum (symbol nil)))
 
 (defcustom real-backup-cleanup-keep 20
   "Number of copies to keep for each file in `real-backup-cleanup'."
