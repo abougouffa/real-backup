@@ -94,17 +94,9 @@ Automatically cleanup after making a backup.
 
 Show a header when vienwing a backup file.
 
-#### `real-backup-compress`
+#### `real-backup-compression`
 
-Compress the backup files.
-
-#### `real-backup-compression-program`
-
-Compression program to be used when `real-backup-compress` is enabled.
-
-#### `real-backup-compression-program-args`
-
-Extra arguments to pass to `real-backup-compression-program`.
+Compression extension to be used, set to nil to disable compression.
 
 ### Function and Macro Documentation
 
