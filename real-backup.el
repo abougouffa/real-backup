@@ -110,26 +110,33 @@ on size."
   :group 'real-backup
   :type 'boolean)
 
-(defcustom real-backup-compress t
-  "Compress the backup files."
+(defcustom real-backup-compression (if (executable-find "zstd") 'zst 'gz)
+  "Compression extension to be used, set to nil to disable compression."
   :group 'real-backup
-  :type 'boolean)
-
-(defcustom real-backup-compression-program (or (executable-find "zstd") (executable-find "gzip"))
-  "Compression program to be used when `real-backup-compress' is enabled."
-  :group 'real-backup
-  :type 'string)
-
-(defcustom real-backup-compression-program-args (when (executable-find "zstd") "--rm")
-  "Extra arguments to pass to `real-backup-compression-program'."
-  :group 'real-backup
-  :type '(choice string (symbol nil)))
+  :type '(choice
+          (const :tag "BZip2" bz2)
+          (const :tag "GZip" gz)
+          (const :tag "Lzma" lz)
+          (const :tag "XZ" xz)
+          (const :tag "Z-Standard" zst)
+          (const :tag "No Compression" nil)))
 
 (defconst real-backup--time-format "%Y-%m-%d-%H-%M-%S"
   "Format given to `format-time-string' which is appended to the filename.")
 
+(defun real-backup--compression-ext ()
+  (if (symbolp real-backup-compression) (concat "." (symbol-name real-backup-compression)) ""))
+
 (defconst real-backup--time-match-regexp "[[:digit:]]\\{4\\}\\(-[[:digit:]]\\{2\\}\\)\\{5\\}"
   "A regexp that matches `real-backup--time-format'.")
+
+(defun real-backup--make-a-copy (orig-filename backup-filename)
+  "Make a copy for ORIG-FILENAME to BACKUP-FILENAME."
+  (let ((jka-compr-verbose nil))
+    (with-auto-compression-mode
+      (with-temp-buffer
+        (insert-file-contents orig-filename)
+        (write-region nil nil (concat backup-filename (real-backup--compression-ext)) nil 0)))))
 
 (defun real-backup ()
   "Perform a backup of the current file if needed."
@@ -138,12 +145,7 @@ on size."
     (when (and (or real-backup-remote-files (not (file-remote-p filename)))
                (funcall real-backup-filter-function filename)
                (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit)))
-      (copy-file filename backup-filename t t t)
-      (when real-backup-compress
-        (let ((default-directory (file-name-directory backup-filename)))
-          (start-process-shell-command
-           "real-backup-compress" nil
-           (concat real-backup-compression-program " " real-backup-compression-program-args " " (file-name-nondirectory backup-filename)))))
+      (real-backup--make-a-copy filename backup-filename)
       (when real-backup-auto-cleanup (real-backup-cleanup filename)))))
 
 (defun real-backup-compute-location (filename &optional unique)
