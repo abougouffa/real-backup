@@ -124,9 +124,6 @@ on size."
 (defconst real-backup--time-format "%Y-%m-%d-%H-%M-%S"
   "Format given to `format-time-string' which is appended to the filename.")
 
-(defun real-backup--compression-ext ()
-  (if (symbolp real-backup-compression) (concat "." (symbol-name real-backup-compression)) ""))
-
 (defconst real-backup--time-match-regexp "[[:digit:]]\\{4\\}\\(-[[:digit:]]\\{2\\}\\)\\{5\\}"
   "A regexp that matches `real-backup--time-format'.")
 
@@ -136,7 +133,11 @@ on size."
     (with-auto-compression-mode
       (with-temp-buffer
         (insert-file-contents orig-filename)
-        (write-region nil nil (concat backup-filename (real-backup--compression-ext)) nil 0)))))
+        (write-region nil nil (concat backup-filename
+                                      (if (symbolp real-backup-compression)
+                                          (concat "." (symbol-name real-backup-compression))
+                                        ""))
+                      nil 0)))))
 
 (defun real-backup ()
   "Perform a backup of the current file if needed."
