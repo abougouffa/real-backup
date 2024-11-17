@@ -1,4 +1,4 @@
-;;; real-backup.el --- Make a copy at each savepoint of a file
+;;; real-backup.el --- Make a copy at each savepoint of a file  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2004  Benjamin RUTT (rot13 "oehgg@oybbzvatgba.va.hf")
 ;; Copyright (C) 2024  Abdelhak BOUGOUFFA (rot13 "nobhtbhssn@srqbencebwrpg.bet")
@@ -8,6 +8,7 @@
 ;; Keywords: files, convenience
 ;; Version: 3.1
 ;; URL: https://github.com/abougouffa/real-backup
+;; Package-Requires: ((emacs "28.1"))
 
 ;;; Commentary:
 
@@ -65,9 +66,11 @@
 ;;; Code:
 
 (autoload 'cl-set-difference "cl-seq")
+(autoload 'string-remove-prefix "subr-x")
 
 (defgroup real-backup nil
-  "Real Backup.")
+  "Real Backup."
+  :group 'files)
 
 (defcustom real-backup-directory (locate-user-emacs-file "real-backup/")
   "The root directory when to create backups."
@@ -174,9 +177,21 @@ When UNIQUE is provided, add a unique timestamp after the file name."
          (backup-dir (file-name-directory backup-filename)))
     (directory-files backup-dir nil (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
 
+(defalias 'real-backup--string-split
+  (if (< emacs-major-version 29)
+      (defun real-backup--string-split (str &optional sep)
+        (let ((start-from 0) index parts)
+          ;; "[ \f\t\n\r\v]+" is taken from `split-string-default-separators'
+          (while (setq index (string-match (or sep "[ \f\t\n\r\v]+") str start-from))
+            (push (substring str start-from index) parts)
+            (setq start-from (match-end 0)))
+          (push (substring str start-from) parts)
+          (reverse parts)))
+    'string-split))
+
 (defun real-backup--format-as-date (orig-name backup-name)
   (let ((timestamp (file-name-sans-extension (string-remove-prefix (concat (file-name-nondirectory orig-name) "#") backup-name))))
-    (cons (apply (apply-partially #'format "%s-%s-%s %s:%s:%s") (string-split timestamp "-")) backup-name)))
+    (cons (apply (apply-partially #'format "%s-%s-%s %s:%s:%s") (real-backup--string-split timestamp "-")) backup-name)))
 
 ;;;###autoload
 (defun real-backup-cleanup (filename)
