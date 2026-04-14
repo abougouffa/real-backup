@@ -6,7 +6,7 @@
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Keywords: files, convenience
-;; Version: 3.2
+;; Version: 3.3
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "28.1"))
 
@@ -63,11 +63,15 @@
 ;; - v2.1 -> v3.0:  rebrand the package as `real-backup'
 ;; - v3.0 -> v3.1:  add compression support
 ;; - v3.1 -> v3.2:  add support for candidates preview
+;; - v3.2 -> v3.3:
+;;   - jump to first changed position when switching between preview candidates
+;;   - add optional split-window diff view when previewing candidates
 
 ;;; Code:
 
 (autoload 'cl-set-difference "cl-seq")
 (autoload 'string-remove-prefix "subr-x")
+(autoload 'diff-no-select "diff")
 
 (defgroup real-backup nil
   "Real Backup."
@@ -124,6 +128,27 @@ on size."
           (const :tag "XZ" xz)
           (const :tag "Z-Standard" zst)
           (const :tag "No Compression" nil)))
+
+(defcustom real-backup-preview-jump-to-first-change t
+  "When non-nil, jump to the first changed position when previewing a candidate.
+The jump point is computed relative to the previously previewed candidate."
+  :group 'real-backup
+  :type 'boolean)
+
+(defcustom real-backup-preview-show-diff nil
+  "When non-nil, show a diff window alongside the backup preview window."
+  :group 'real-backup
+  :type 'boolean)
+
+(defcustom real-backup-preview-diff-against-current-file nil
+  "Controls what is compared in the diff window.
+Only relevant when `real-backup-preview-show-diff' is non-nil.
+When non-nil, the diff window shows changes between the saved file on disk
+and the previewed candidate.
+When nil (the default), the diff window shows changes between the
+previously previewed candidate and the current one."
+  :group 'real-backup
+  :type 'boolean)
 
 (defconst real-backup--time-format "%Y-%m-%d-%H-%M-%S"
   "Format given to `format-time-string' which is appended to the filename.")
@@ -216,24 +241,73 @@ best match for the current minibuffer input is returned."
           ;; When nothing has been typed yet show the first candidate
           (car candidates))))))
 
-(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf target-win label)
+(defun real-backup--find-first-diff-pos (old-text new-text)
+  "Return the 0-based index of the first differing character between OLD-TEXT and NEW-TEXT.
+Returns nil when the two strings are identical."
+  (let ((result (compare-strings old-text nil nil new-text nil nil)))
+    (unless (eq result t)
+      (1- (abs result)))))
+
+(defun real-backup--show-diff-preview (old-content new-content diff-buf orig-filename diff-label)
+  "Update DIFF-BUF with a unified diff between OLD-CONTENT and NEW-CONTENT.
+ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
+  (let ((old-tmp (make-temp-file "real-backup-diff-"))
+        (new-tmp (make-temp-file "real-backup-diff-")))
+    (unwind-protect
+        (progn
+          (with-temp-file old-tmp (insert (or old-content "")))
+          (with-temp-file new-tmp (insert new-content))
+          (diff-no-select old-tmp new-tmp "-u" t diff-buf)
+          (with-current-buffer diff-buf
+            ;; Force synchronous fontification; diff-mode registers keywords but
+            ;; jit-lock would otherwise defer rendering until display time.
+            (font-lock-ensure)
+            (when real-backup-show-header
+              (setq header-line-format
+                    (propertize (format "--- Diff%s: %s %%-" diff-label (file-name-nondirectory orig-filename))
+                                'face 'warning))))
+          (display-buffer diff-buf
+                          '((display-buffer-reuse-window display-buffer-use-some-window))))
+      (when (file-exists-p old-tmp) (delete-file old-tmp))
+      (when (file-exists-p new-tmp) (delete-file new-tmp)))))
+
+(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf target-win label &optional prev-content)
   "Display a preview of BACKUP-NAME from BACKUP-DIR in PREVIEW-BUF.
 ORIG-MODE is called to activate the appropriate major mode, LABEL is
 shown in the buffer's header line, and TARGET-WIN is the window in which
-the preview will be shown."
+the preview will be shown.  When PREV-CONTENT is non-nil and
+`real-backup-preview-jump-to-first-change' is non-nil, point is moved to
+the first position that differs from PREV-CONTENT.  Returns the buffer
+contents as a string, or nil if the file is not readable."
   (let ((full-path (expand-file-name backup-name backup-dir)))
     (when (file-readable-p full-path)
       (with-current-buffer preview-buf
-        (let ((inhibit-read-only t))
+        (let ((inhibit-read-only t)
+              (jka-compr-verbose nil))
           (erase-buffer)
           (with-auto-compression-mode
             (insert-file-contents full-path))
-          (funcall orig-mode)
+          (delay-mode-hooks (funcall orig-mode))
+          (font-lock-ensure) ; Force synchronous fontification
+          (display-line-numbers-mode 1)
           (setq buffer-read-only t)
-          (goto-char (point-min))
-          (when real-backup-show-header
-            (setq header-line-format (propertize label 'face 'warning))))
-        (display-buffer preview-buf '((display-buffer-reuse-window display-buffer-same-window)))))))
+          (let* ((new-content (buffer-string))
+                 (jump-pos
+                  (if (and real-backup-preview-jump-to-first-change prev-content)
+                      (let ((diff-pos (real-backup--find-first-diff-pos prev-content new-content)))
+                        ;; diff-pos is 0-based; buffer positions are 1-based
+                        (if diff-pos (1+ diff-pos) (point-min)))
+                    (point-min))))
+            (goto-char jump-pos)
+            (when real-backup-show-header
+              (setq header-line-format (propertize label 'face 'warning)))
+            (when-let* ((win (display-buffer preview-buf '((display-buffer-reuse-window display-buffer-same-window)))))
+              (set-window-point win jump-pos)
+              (when real-backup-preview-jump-to-first-change
+                (with-selected-window win
+                  (recenter)
+                  (pulse-momentary-highlight-one-line (point)))))
+            new-content))))))
 
 ;;;###autoload
 (defun real-backup-open-backup (filename)
@@ -250,17 +324,38 @@ the preview will be shown."
                                (real-backup-backups-of-file filename)))
          (candidates (mapcar #'car backup-files))
          (preview-buf (get-buffer-create " *real-backup-preview*"))
+         (diff-buf (and real-backup-preview-show-diff (get-buffer-create " *real-backup-diff*")))
+         (current-file-content
+          (and diff-buf real-backup-preview-diff-against-current-file
+               (with-temp-buffer (insert-file-contents filename) (buffer-string))))
          (last-preview nil)
+         (last-preview-content nil)
          (do-preview
           (lambda ()
             (when-let* ((current (real-backup--completing-read-candidate candidates))
                         (backup-name (cdr (assoc current backup-files))))
               (unless (equal current last-preview)
-                (setq last-preview current)
-                (real-backup--show-preview
-                 backup-name backup-dir orig-mode preview-buf orig-win
-                 (format "--- Preview: Real Backup of %s @ %s %%-"
-                         (file-name-nondirectory filename) current))))))
+                (let ((prev-content last-preview-content))
+                  (setq last-preview current)
+                  (setq last-preview-content
+                        (real-backup--show-preview
+                         backup-name backup-dir orig-mode preview-buf orig-win
+                         (format "--- Preview: Real Backup of %s @ %s %%-"
+                                 (file-name-nondirectory filename) current)
+                         prev-content))
+                  ;; Show the diff only when we have content to display, and either we're
+                  ;; diffing against the current file (always available) or we have a
+                  ;; previous candidate to compare against (not available on the first pick).
+                  (when (and diff-buf last-preview-content
+                             (or real-backup-preview-diff-against-current-file prev-content))
+                    (real-backup--show-diff-preview
+                     (if real-backup-preview-diff-against-current-file
+                         current-file-content
+                       prev-content)
+                     last-preview-content diff-buf filename
+                     (if real-backup-preview-diff-against-current-file
+                         " (vs. current file)"
+                       " (vs. previous candidate)"))))))))
          (selected
           (unwind-protect
               (minibuffer-with-setup-hook
@@ -268,6 +363,8 @@ the preview will be shown."
                 (completing-read "Select version: " candidates nil t))
             (when (buffer-live-p preview-buf)
               (kill-buffer preview-buf))
+            (when (and diff-buf (buffer-live-p diff-buf))
+              (kill-buffer diff-buf))
             (when (window-live-p orig-win)
               (set-window-buffer orig-win orig-buf))))
          (backup-file (alist-get selected backup-files nil nil #'equal)))
