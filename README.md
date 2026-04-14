@@ -42,19 +42,23 @@ the saving of gnus .newsrc.eld files, do:
 
 ### ChangeLog
 
-- v1.0 -> v1.1:  added `real-backup-filter-function`
-- v1.1 -> v1.2:
+- v1.1:  added `real-backup-filter-function`
+- v1.2:
   - added real-backup-size-limit
   - fixed "Local Variables" docs, which was inadvertently being activated
-- v1.2 -> v1.3:  fix for some emacsen not having `file-remote-p`
-- v1.3 -> v1.4:  added footer and autoload
-- v1.4 -> v2.0:  refactor, deprecate old Emacs
-- v2.0 -> v2.1:
+- v1.3:  fix for some emacsen not having `file-remote-p`
+- v1.4:  added footer and autoload
+- v2.0:  refactor, deprecate old Emacs
+- v2.1:
   - more features and tweaks
   - add `real-backup-cleanup` and `real-backup-auto-cleanup`
   - add `real-backup-open-backup`
-- v2.1 -> v3.0:  rebrand the package as `real-backup`
-- v3.0 -> v3.1:  add compression support
+- v3.0:  rebrand the package as `real-backup`
+- v3.1:  add compression support
+- v3.2:  add support for candidates preview
+- v3.3:
+  - jump to first changed position when switching between preview candidates
+  - add optional split-window diff view when previewing candidates
 
 
 
@@ -97,6 +101,24 @@ Show a header when vienwing a backup file.
 #### `real-backup-compression`
 
 Compression extension to be used, set to nil to disable compression.
+
+#### `real-backup-preview-jump-to-first-change`
+
+When non-nil, jump to the first changed position when previewing a candidate.
+The jump point is computed relative to the previously previewed candidate.
+
+#### `real-backup-preview-show-diff`
+
+When non-nil, show a diff window alongside the backup preview window.
+
+#### `real-backup-preview-diff-against-current-file`
+
+Controls what is compared in the diff window.
+Only relevant when `real-backup-preview-show-diff` is non-nil.
+When non-nil, the diff window shows changes between the saved file on disk
+and the previewed candidate.
+When nil (the default), the diff window shows changes between the
+previously previewed candidate and the current one.
 
 ### Function and Macro Documentation
 

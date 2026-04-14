@@ -49,21 +49,21 @@
 ;;     (setq real-backup-filter-function 'real-backup-no-newsrc-eld)
 
 ;;; ChangeLog
-;; - v1.0 -> v1.1:  added `real-backup-filter-function'
-;; - v1.1 -> v1.2:
+;; - v1.1:  added `real-backup-filter-function'
+;; - v1.2:
 ;;   - added real-backup-size-limit
 ;;   - fixed "Local Variables" docs, which was inadvertently being activated
-;; - v1.2 -> v1.3:  fix for some emacsen not having `file-remote-p'
-;; - v1.3 -> v1.4:  added footer and autoload
-;; - v1.4 -> v2.0:  refactor, deprecate old Emacs
-;; - v2.0 -> v2.1:
+;; - v1.3:  fix for some emacsen not having `file-remote-p'
+;; - v1.4:  added footer and autoload
+;; - v2.0:  refactor, deprecate old Emacs
+;; - v2.1:
 ;;   - more features and tweaks
 ;;   - add `real-backup-cleanup' and `real-backup-auto-cleanup'
 ;;   - add `real-backup-open-backup'
-;; - v2.1 -> v3.0:  rebrand the package as `real-backup'
-;; - v3.0 -> v3.1:  add compression support
-;; - v3.1 -> v3.2:  add support for candidates preview
-;; - v3.2 -> v3.3:
+;; - v3.0:  rebrand the package as `real-backup'
+;; - v3.1:  add compression support
+;; - v3.2:  add support for candidates preview
+;; - v3.3:
 ;;   - jump to first changed position when switching between preview candidates
 ;;   - add optional split-window diff view when previewing candidates
 
