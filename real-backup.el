@@ -320,8 +320,8 @@ contents as a string, or nil if the file is not readable."
          (orig-buf (current-buffer))
          (orig-win (selected-window))
          (backup-dir (file-name-directory (real-backup-compute-location filename)))
-         (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename)
-                               (real-backup-backups-of-file filename)))
+         (backup-files (nreverse (mapcar (apply-partially #'real-backup--format-as-date filename)
+                                       (real-backup-backups-of-file filename))))
          (candidates (mapcar #'car backup-files))
          (preview-buf (get-buffer-create " *real-backup-preview*"))
          (diff-buf (and real-backup-preview-show-diff (get-buffer-create " *real-backup-diff*")))
@@ -343,19 +343,18 @@ contents as a string, or nil if the file is not readable."
                          (format "--- Preview: Real Backup of %s @ %s %%-"
                                  (file-name-nondirectory filename) current)
                          prev-content))
-                  ;; Show the diff only when we have content to display, and either we're
-                  ;; diffing against the current file (always available) or we have a
-                  ;; previous candidate to compare against (not available on the first pick).
-                  (when (and diff-buf last-preview-content
-                             (or real-backup-preview-diff-against-current-file prev-content))
+                  ;; Show the diff alongside the preview.  For the first candidate
+                  ;; (no prev-content), diff it against itself so the diff window
+                  ;; still appears (it will be empty).
+                  (when (and diff-buf last-preview-content)
                     (real-backup--show-diff-preview
-                     (if real-backup-preview-diff-against-current-file
-                         current-file-content
-                       prev-content)
+                     (cond (real-backup-preview-diff-against-current-file current-file-content)
+                           (prev-content prev-content)
+                           (t last-preview-content))
                      last-preview-content diff-buf filename
-                     (if real-backup-preview-diff-against-current-file
-                         " (vs. current file)"
-                       " (vs. previous candidate)"))))))))
+                     (cond (real-backup-preview-diff-against-current-file " (vs. current file)")
+                           (prev-content " (vs. previous candidate)")
+                           (t " (vs. self)"))))))))
          (selected
           (unwind-protect
               (minibuffer-with-setup-hook
