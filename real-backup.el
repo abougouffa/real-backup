@@ -259,6 +259,8 @@ ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
           (with-temp-file new-tmp (insert new-content))
           (diff-no-select old-tmp new-tmp "-u" t diff-buf)
           (with-current-buffer diff-buf
+            ;; Force synchronous fontification; diff-mode registers keywords but
+            ;; jit-lock would otherwise defer rendering until display time.
             (font-lock-ensure)
             (when real-backup-show-header
               (setq header-line-format
@@ -286,6 +288,9 @@ contents as a string, or nil if the file is not readable."
           (with-auto-compression-mode
             (insert-file-contents full-path))
           (funcall orig-mode)
+          ;; Force synchronous fontification before locking the buffer;
+          ;; jit-lock defers this until display time and buffer-read-only
+          ;; must already be set by then.
           (font-lock-ensure)
           (setq buffer-read-only t)
           (let* ((new-content (buffer-string))
