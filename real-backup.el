@@ -6,7 +6,7 @@
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Keywords: files, convenience
-;; Version: 3.1
+;; Version: 3.2
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "28.1"))
 
@@ -62,6 +62,7 @@
 ;;   - add `real-backup-open-backup'
 ;; - v2.1 -> v3.0:  rebrand the package as `real-backup'
 ;; - v3.0 -> v3.1:  add compression support
+;; - v3.1 -> v3.2:  add support for candidates preview
 
 ;;; Code:
 
@@ -168,7 +169,7 @@ When UNIQUE is provided, add a unique timestamp after the file name."
                            containing-dir))
          (backup-dir (file-name-concat real-backup-directory method host user containing-dir))
          (backup-basename (format "%s%s" (file-name-nondirectory localname) (if unique (concat "#" (format-time-string real-backup--time-format)) ""))))
-    (when (not (file-exists-p backup-dir))
+    (unless (file-exists-p backup-dir)
       (make-directory backup-dir t))
     (expand-file-name backup-basename backup-dir)))
 
@@ -179,6 +180,7 @@ When UNIQUE is provided, add a unique timestamp after the file name."
     (directory-files backup-dir nil (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
 
 (defun real-backup--format-as-date (orig-name backup-name)
+  "Format ORIG-NAME and BACKUP-NAME as a date."
   (let ((timestamp (file-name-sans-extension (string-remove-prefix (concat (file-name-nondirectory orig-name) "#") backup-name))))
     (cons (apply (apply-partially #'format "%s-%s-%s %s:%s:%s") (split-string timestamp "-")) backup-name)))
 
@@ -194,26 +196,93 @@ When UNIQUE is provided, add a unique timestamp after the file name."
         (let ((fname (expand-file-name file backup-dir)))
           (delete-file fname t))))))
 
+(defun real-backup--completing-read-candidate (candidates)
+  "Return the currently highlighted candidate during `completing-read'.
+CANDIDATES is the list of candidate strings.  When Vertico is active the
+currently selected item is returned via its internal state; otherwise the
+best match for the current minibuffer input is returned."
+  (cond
+   ;; `vertico': use the internally tracked index/candidates list
+   ((and (bound-and-true-p vertico-mode)
+         (boundp 'vertico--candidates)
+         (boundp 'vertico--index)
+         (>= vertico--index 0))
+    (nth vertico--index vertico--candidates))
+   ;; Fallback to builtin `icomplete'/`fido': match against what is typed
+   (t
+    (let ((input (minibuffer-contents-no-properties)))
+      (or (car (member input candidates))
+          (car (all-completions input candidates))
+          ;; When nothing has been typed yet show the first candidate
+          (car candidates))))))
+
+(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf target-win label)
+  "Display a preview of BACKUP-NAME from BACKUP-DIR in PREVIEW-BUF.
+ORIG-MODE is called to activate the appropriate major mode, LABEL is
+shown in the buffer's header line, and TARGET-WIN is the window in which
+the preview will be shown."
+  (let ((full-path (expand-file-name backup-name backup-dir)))
+    (when (file-readable-p full-path)
+      (with-current-buffer preview-buf
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (with-auto-compression-mode
+            (insert-file-contents full-path))
+          (funcall orig-mode)
+          (setq buffer-read-only t)
+          (goto-char (point-min))
+          (when real-backup-show-header
+            (setq header-line-format (propertize label 'face 'warning))))
+        (display-buffer preview-buf '((display-buffer-reuse-window display-buffer-same-window)))))))
+
 ;;;###autoload
 (defun real-backup-open-backup (filename)
   "Open a backup of FILENAME or the current buffer."
   (interactive (list buffer-file-name))
-  (if (not filename)
-      (user-error "This buffer is not visiting a file")
-    (let* ((current-major-mode major-mode)
-           (default-dir default-directory)
-           (backup-dir (file-name-directory (real-backup-compute-location filename)))
-           (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename) (real-backup-backups-of-file filename)))
-           (backup-file (alist-get (completing-read "Select file: " (mapcar #'car backup-files)) backup-files nil nil #'equal)))
-      (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
-        ;; Apply the same major mode and the same default directory as the original file
-        (funcall current-major-mode)
-        (setq-local default-directory default-dir)
-        (when real-backup-show-header
-          (setq header-line-format
-                (propertize (format "--- Real Backup of file %s @ %s %%-" (file-name-nondirectory filename) (car (real-backup--format-as-date filename backup-file)))
-                            'face 'warning)))
-        (read-only-mode 1)))))
+  (unless filename
+    (user-error "This buffer is not visiting a file"))
+  (let* ((orig-mode major-mode)
+         (orig-dir default-directory)
+         (orig-buf (current-buffer))
+         (orig-win (selected-window))
+         (backup-dir (file-name-directory (real-backup-compute-location filename)))
+         (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename)
+                               (real-backup-backups-of-file filename)))
+         (candidates (mapcar #'car backup-files))
+         (preview-buf (get-buffer-create " *real-backup-preview*"))
+         (last-preview nil)
+         (do-preview
+          (lambda ()
+            (when-let* ((current (real-backup--completing-read-candidate candidates))
+                        (backup-name (cdr (assoc current backup-files))))
+              (unless (equal current last-preview)
+                (setq last-preview current)
+                (real-backup--show-preview
+                 backup-name backup-dir orig-mode preview-buf orig-win
+                 (format "--- Preview: Real Backup of %s @ %s %%-"
+                         (file-name-nondirectory filename) current))))))
+         (selected
+          (unwind-protect
+              (minibuffer-with-setup-hook
+                  (lambda () (add-hook 'post-command-hook do-preview nil t))
+                (completing-read "Select version: " candidates nil t))
+            (when (buffer-live-p preview-buf)
+              (kill-buffer preview-buf))
+            (when (window-live-p orig-win)
+              (set-window-buffer orig-win orig-buf))))
+         (backup-file (alist-get selected backup-files nil nil #'equal)))
+    (if backup-file
+        (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
+          (funcall orig-mode)
+          (setq-local default-directory orig-dir)
+          (when real-backup-show-header
+            (setq header-line-format
+                  (propertize (format "--- Real Backup of file %s @ %s %%-"
+                                      (file-name-nondirectory filename)
+                                      (car (real-backup--format-as-date filename backup-file)))
+                              'face 'warning)))
+          (read-only-mode 1))
+      (user-error "No backup version selected"))))
 
 ;;;###autoload
 (define-minor-mode real-backup-mode
