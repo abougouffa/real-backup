@@ -259,6 +259,7 @@ ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
           (with-temp-file new-tmp (insert new-content))
           (diff-no-select old-tmp new-tmp "-u" t diff-buf)
           (with-current-buffer diff-buf
+            (font-lock-ensure)
             (when real-backup-show-header
               (setq header-line-format
                     (propertize (format "--- Diff%s: %s %%-" diff-label (file-name-nondirectory orig-filename))
@@ -283,8 +284,9 @@ contents as a string, or nil if the file is not readable."
         (let ((inhibit-read-only t))
           (erase-buffer)
           (with-auto-compression-mode
-            (insert-file-contents full-path)
-            (delay-mode-hooks (funcall orig-mode)))
+            (insert-file-contents full-path))
+          (funcall orig-mode)
+          (font-lock-ensure)
           (setq buffer-read-only t)
           (let* ((new-content (buffer-string))
                  (jump-pos
