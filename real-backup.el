@@ -168,7 +168,7 @@ When UNIQUE is provided, add a unique timestamp after the file name."
                            containing-dir))
          (backup-dir (file-name-concat real-backup-directory method host user containing-dir))
          (backup-basename (format "%s%s" (file-name-nondirectory localname) (if unique (concat "#" (format-time-string real-backup--time-format)) ""))))
-    (when (not (file-exists-p backup-dir))
+    (unless (file-exists-p backup-dir)
       (make-directory backup-dir t))
     (expand-file-name backup-basename backup-dir)))
 
@@ -214,10 +214,11 @@ best match for the current minibuffer input is returned."
           ;; When nothing has been typed yet show the first candidate.
           (car candidates))))))
 
-(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf label)
+(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf target-win label)
   "Display a preview of BACKUP-NAME from BACKUP-DIR in PREVIEW-BUF.
-ORIG-MODE is called to activate the appropriate major mode, and LABEL is
-shown in the buffer's header line."
+ORIG-MODE is called to activate the appropriate major mode, LABEL is
+shown in the buffer's header line, and TARGET-WIN is the window in which
+the preview will be shown."
   (let ((full-path (expand-file-name backup-name backup-dir)))
     (when (file-readable-p full-path)
       (with-current-buffer preview-buf
@@ -229,55 +230,58 @@ shown in the buffer's header line."
           (setq buffer-read-only t)
           (goto-char (point-min))
           (when real-backup-show-header
-            (setq header-line-format (propertize label 'face 'warning))))
-        (display-buffer preview-buf
-                        '((display-buffer-reuse-window
-                           display-buffer-at-bottom)
-                          (window-height . 0.35)))))))
+            (setq header-line-format (propertize label 'face 'warning)))))
+      (when (window-live-p target-win)
+        (set-window-buffer target-win preview-buf)))))
 
 ;;;###autoload
 (defun real-backup-open-backup (filename)
   "Open a backup of FILENAME or the current buffer."
   (interactive (list buffer-file-name))
-  (if (not filename)
-      (user-error "This buffer is not visiting a file")
-    (let* ((current-major-mode major-mode)
-           (default-dir default-directory)
-           (backup-dir (file-name-directory (real-backup-compute-location filename)))
-           (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename) (real-backup-backups-of-file filename)))
-           (candidates (mapcar #'car backup-files))
-           (preview-buf (get-buffer-create " *real-backup-preview*"))
-           (last-preview nil)
-           (do-preview
-            (lambda ()
-              (let* ((current (real-backup--completing-read-candidate candidates))
-                     (backup-name (cdr (assoc current backup-files))))
-                (when (and backup-name (not (equal current last-preview)))
-                  (setq last-preview current)
-                  (real-backup--show-preview
-                   backup-name backup-dir current-major-mode preview-buf
-                   (format "--- Preview: Real Backup of %s @ %s %%-"
-                           (file-name-nondirectory filename) current))))))
-           (selected
-            (unwind-protect
-                (minibuffer-with-setup-hook
-                    (lambda () (add-hook 'post-command-hook do-preview nil t))
-                  (completing-read "Select version: " candidates nil t))
-              (when (buffer-live-p preview-buf)
-                (delete-windows-on preview-buf)
-                (kill-buffer preview-buf))))
-           (backup-file (alist-get selected backup-files nil nil #'equal)))
-      (if backup-file
-          (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
-            ;; Apply the same major mode and the same default directory as the original file
-            (funcall current-major-mode)
-            (setq-local default-directory default-dir)
-            (when real-backup-show-header
-              (setq header-line-format
-                    (propertize (format "--- Real Backup of file %s @ %s %%-" (file-name-nondirectory filename) (car (real-backup--format-as-date filename backup-file)))
-                                'face 'warning)))
-            (read-only-mode 1))
-        (user-error "No backup version selected")))))
+  (unless filename
+    (user-error "This buffer is not visiting a file"))
+  (let* ((orig-mode major-mode)
+         (orig-dir default-directory)
+         (orig-buf (current-buffer))
+         (orig-win (selected-window))
+         (backup-dir (file-name-directory (real-backup-compute-location filename)))
+         (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename)
+                               (real-backup-backups-of-file filename)))
+         (candidates (mapcar #'car backup-files))
+         (preview-buf (get-buffer-create " *real-backup-preview*"))
+         (last-preview nil)
+         (do-preview
+          (lambda ()
+            (when-let* ((current (real-backup--completing-read-candidate candidates))
+                        (backup-name (cdr (assoc current backup-files))))
+              (unless (equal current last-preview)
+                (setq last-preview current)
+                (real-backup--show-preview
+                 backup-name backup-dir orig-mode preview-buf orig-win
+                 (format "--- Preview: Real Backup of %s @ %s %%-"
+                         (file-name-nondirectory filename) current))))))
+         (selected
+          (unwind-protect
+              (minibuffer-with-setup-hook
+                  (lambda () (add-hook 'post-command-hook do-preview nil t))
+                (completing-read "Select version: " candidates nil t))
+            (when (buffer-live-p preview-buf)
+              (kill-buffer preview-buf))
+            (when (window-live-p orig-win)
+              (set-window-buffer orig-win orig-buf))))
+         (backup-file (alist-get selected backup-files nil nil #'equal)))
+    (if backup-file
+        (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
+          (funcall orig-mode)
+          (setq-local default-directory orig-dir)
+          (when real-backup-show-header
+            (setq header-line-format
+                  (propertize (format "--- Real Backup of file %s @ %s %%-"
+                                      (file-name-nondirectory filename)
+                                      (car (real-backup--format-as-date filename backup-file)))
+                              'face 'warning)))
+          (read-only-mode 1))
+      (user-error "No backup version selected"))))
 
 ;;;###autoload
 (define-minor-mode real-backup-mode
