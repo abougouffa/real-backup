@@ -251,8 +251,10 @@ Returns nil when the two strings are identical."
 (defun real-backup--show-diff-preview (old-content new-content diff-buf orig-filename diff-label)
   "Update DIFF-BUF with a unified diff between OLD-CONTENT and NEW-CONTENT.
 ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
-  (let ((old-tmp (make-temp-file "real-backup-diff-"))
-        (new-tmp (make-temp-file "real-backup-diff-")))
+  (let* ((suffix (when-let* ((ext (file-name-extension orig-filename)))
+                   (concat "." ext)))
+         (old-tmp (make-temp-file "real-backup-diff-" nil suffix))
+         (new-tmp (make-temp-file "real-backup-diff-" nil suffix)))
     (unwind-protect
         (progn
           (with-temp-file old-tmp (insert (or old-content "")))
