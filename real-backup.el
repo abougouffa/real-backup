@@ -312,7 +312,10 @@ contents as a string, or nil if the file is not readable."
             new-content))))))
 
 ;;;###autoload
-(defun real-backup-open-backup (filename)
+(define-obsolete-function-alias 'real-backup-open-backup 'real-backup-open "3.4" "Open a backup of FILENAME or the current buffer.")
+
+;;;###autoload
+(defun real-backup-open (filename)
   "Open a backup of FILENAME or the current buffer."
   (interactive (list buffer-file-name))
   (unless filename
