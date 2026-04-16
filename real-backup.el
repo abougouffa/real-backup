@@ -66,6 +66,9 @@
 ;; - v3.3:
 ;;   - jump to first changed position when switching between preview candidates
 ;;   - add optional split-window diff view when previewing candidates
+;; - v3.4:
+;;   - make `real-backup-open-backup' obsolete, use `real-backup-open' instead
+;;   - better diffs
 
 ;;; Code:
 
