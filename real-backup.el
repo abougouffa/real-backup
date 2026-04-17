@@ -83,9 +83,9 @@
   :type 'directory)
 
 (defcustom real-backup-remote-files t
-  "Whether to backup remote files at each save.
+  "Whether to backup remote files.
 
-Defaults to nil."
+When non-nil, remote files will be saved locally."
   :group 'real-backup
   :type 'boolean)
 
@@ -283,8 +283,8 @@ best match for the current minibuffer input is returned."
           (car candidates))))))
 
 (defun real-backup--find-first-diff-pos (old-text new-text)
-  "Return the 0-based index of the first differing character between OLD-TEXT and NEW-TEXT.
-Returns nil when the two strings are identical."
+  "Return first differing index between OLD-TEXT and NEW-TEXT.
+The returned index is 0-based.  Return nil when both strings are identical."
   (let ((result (compare-strings old-text nil nil new-text nil nil)))
     (unless (eq result t)
       (1- (abs result)))))
