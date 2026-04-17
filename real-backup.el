@@ -108,6 +108,13 @@ on size."
   :group 'real-backup
   :type '(choice natnum (symbol nil)))
 
+(defcustom real-backup-remote-size-limit (* 1 1024 1024)
+  "Same as `real-backup-size-limit', but for remote files.
+
+Relevant when `real-backup-remote-files' is non-nil."
+  :group 'real-backup
+  :type '(choice natnum (symbol nil)))
+
 (defcustom real-backup-cleanup-keep 20
   "Number of copies to keep for each file in `real-backup-cleanup'."
   :group 'real-backup
@@ -199,14 +206,15 @@ previously previewed candidate and the current one."
   "Perform a backup of the current file if needed."
   (when-let* ((filename (buffer-file-name))
               (backup-filename (real-backup-compute-location filename 'unique)))
-    (and (or real-backup-remote-files ; enable on remote files
-             (and (not (file-remote-p filename)) ; local file
-                  (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit)))) ; and acceptable size
+    (and (or (and (not (file-remote-p filename)) ; local file
+                  (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit))) ; and acceptable size
+             (and real-backup-remote-files ; remote file and enabled remote files
+                  (or (not real-backup-remote-size-limit) (<= (buffer-size) real-backup-remote-size-limit)))) ; the remote file size limit
          (funcall real-backup-filter-function filename) ; file not filtered out
          (real-backup--ensure-backup-dir backup-filename) ; directory exists and writable
          (real-backup--make-a-copy filename backup-filename) ; do make a backup of the file
          real-backup-auto-cleanup ; cleanup if necessary
-         (real-backup-cleanup filename)))))
+         (real-backup-cleanup filename))))
 
 (defun real-backup-compute-location (filename &optional unique)
   "Compute backup location for FILENAME.
