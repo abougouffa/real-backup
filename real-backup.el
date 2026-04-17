@@ -309,8 +309,7 @@ ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
               (setq header-line-format
                     (propertize (format "--- Diff%s: %s %%-" diff-label (file-name-nondirectory orig-filename))
                                 'face 'warning))))
-          (display-buffer diff-buf
-                          '((display-buffer-reuse-window display-buffer-use-some-window))))
+          (display-buffer diff-buf '((display-buffer-reuse-window display-buffer-use-some-window))))
       (when (file-exists-p old-tmp) (delete-file old-tmp))
       (when (file-exists-p new-tmp) (delete-file new-tmp)))))
 
@@ -363,7 +362,6 @@ contents as a string, or nil if the file is not readable."
   (let* ((orig-mode major-mode)
          (orig-dir default-directory)
          (orig-buf (current-buffer))
-         (orig-win (selected-window))
          (backup-dir (file-name-directory (real-backup-compute-location filename)))
          (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename)
                                (real-backup-backups-of-file filename)))
@@ -401,17 +399,25 @@ contents as a string, or nil if the file is not readable."
                      (if real-backup-preview-diff-against-current-file
                          " (vs. current file)"
                        " (vs. previous candidate)"))))))))
+         (wconfig (current-window-configuration))
          (selected
           (unwind-protect
-              (minibuffer-with-setup-hook
-                  (lambda () (add-hook 'post-command-hook do-preview nil t))
-                (completing-read "Select version: " candidates nil t))
+              (progn
+                ;; Setup the preview and diff window if enabled
+                (delete-other-windows)
+                (window--display-buffer preview-buf (selected-window) 'reuse)
+                (when (buffer-live-p diff-buf)
+                  (window--display-buffer diff-buf (split-window-right) 'reuse))
+                ;; Do completion with preview
+                (minibuffer-with-setup-hook
+                    (lambda () (add-hook 'post-command-hook do-preview nil t))
+                  (completing-read "Select version: " candidates nil t)))
             (when (buffer-live-p preview-buf)
               (kill-buffer preview-buf))
             (when (and diff-buf (buffer-live-p diff-buf))
               (kill-buffer diff-buf))
-            (when (window-live-p orig-win)
-              (set-window-buffer orig-win orig-buf))))
+            ;; Restore the original window layout
+            (set-window-configuration wconfig)))
          (backup-file (alist-get selected backup-files nil nil #'equal)))
     (if backup-file
         (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
