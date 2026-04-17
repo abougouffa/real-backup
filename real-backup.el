@@ -85,7 +85,7 @@
 (defcustom real-backup-remote-files t
   "Whether to backup remote files at each save.
 
-Defaults to nil."
+Defaults to t."
   :group 'real-backup
   :type 'boolean)
 
@@ -161,17 +161,47 @@ previously previewed candidate and the current one."
 (defconst real-backup--time-match-regexp "[[:digit:]]\\{4\\}\\(-[[:digit:]]\\{2\\}\\)\\{5\\}"
   "A regexp that matches `real-backup--time-format'.")
 
+(defun real-backup--warn (fmt &rest args)
+  "Show a warning message using FMT with ARGS."
+  (display-warning 'real-backup (apply #'format fmt args) :warning))
+
+(defun real-backup--compression-extension ()
+  "Return file extension for `real-backup-compression', or nil."
+  (when (symbolp real-backup-compression)
+    (symbol-name real-backup-compression)))
+
+(defun real-backup--backup-target-path (backup-filename)
+  "Return actual backup file path for BACKUP-FILENAME."
+  (if-let* ((ext (real-backup--compression-extension)))
+      (concat backup-filename "." ext)
+    backup-filename))
+
 (defun real-backup--make-a-copy (orig-filename backup-filename)
   "Make a copy for ORIG-FILENAME to BACKUP-FILENAME."
-  (let ((jka-compr-verbose nil))
-    (with-auto-compression-mode
-      (with-temp-buffer
-        (insert-file-contents orig-filename)
-        (write-region nil nil (concat backup-filename
-                                      (if (symbolp real-backup-compression)
-                                          (concat "." (symbol-name real-backup-compression))
-                                        ""))
-                      nil 0)))))
+  (let ((target (real-backup--backup-target-path backup-filename)))
+    (condition-case err
+        (if (real-backup--compression-extension)
+            (let ((jka-compr-verbose nil))
+              (with-auto-compression-mode
+                (with-temp-buffer
+                  (insert-file-contents orig-filename)
+                  (write-region nil nil target nil 'silent))))
+          (copy-file orig-filename target t t t))
+      (error
+       (real-backup--warn "Failed to backup %s: %s"
+                          (abbreviate-file-name orig-filename)
+                          (error-message-string err))
+       nil))))
+
+(defun real-backup--ensure-backup-dir (backup-filename)
+  "Ensure parent directory exists for BACKUP-FILENAME."
+  (condition-case err
+      (make-directory (file-name-directory backup-filename) t)
+    (error
+     (real-backup--warn "Failed to create backup directory for %s: %s"
+                        (abbreviate-file-name backup-filename)
+                        (error-message-string err))
+     nil)))
 
 (defun real-backup ()
   "Perform a backup of the current file if needed."
@@ -180,12 +210,13 @@ previously previewed candidate and the current one."
     (when (and (or real-backup-remote-files (not (file-remote-p filename)))
                (funcall real-backup-filter-function filename)
                (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit)))
-      (real-backup--make-a-copy filename backup-filename)
-      (when real-backup-auto-cleanup (real-backup-cleanup filename)))))
+      (when (and (real-backup--ensure-backup-dir backup-filename)
+                 (real-backup--make-a-copy filename backup-filename)
+                 real-backup-auto-cleanup)
+        (real-backup-cleanup filename)))))
 
-(defun real-backup-compute-location (filename &optional unique)
+(defun real-backup--compute-location (filename &optional unique)
   "Compute backup location for FILENAME.
-
 When UNIQUE is provided, add a unique timestamp after the file name."
   (let* ((localname (or (file-remote-p filename 'localname) filename))
          (method (or (file-remote-p filename 'method) "local"))
@@ -198,16 +229,53 @@ When UNIQUE is provided, add a unique timestamp after the file name."
                              (concat (upcase (match-string 1 containing-dir)) (match-string 2 containing-dir))
                            containing-dir))
          (backup-dir (file-name-concat real-backup-directory method host user containing-dir))
-         (backup-basename (format "%s%s" (file-name-nondirectory localname) (if unique (concat "#" (format-time-string real-backup--time-format)) ""))))
-    (unless (file-exists-p backup-dir)
-      (make-directory backup-dir t))
+         (backup-basename (format "%s%s"
+                                  (file-name-nondirectory localname)
+                                  (if unique (concat "#" (format-time-string real-backup--time-format)) ""))))
     (expand-file-name backup-basename backup-dir)))
+
+(defun real-backup-compute-location (filename &optional unique)
+  "Compute backup location for FILENAME.
+
+When UNIQUE is provided, add a unique timestamp after the file name."
+  (real-backup--compute-location filename unique))
+
+(defun real-backup--parse-backup-entry (orig-filename backup-name backup-dir)
+  "Parse BACKUP-NAME for ORIG-FILENAME in BACKUP-DIR.
+Return plist with :display, :file, :timestamp and :path, or nil when malformed."
+  (let* ((base (file-name-nondirectory orig-filename))
+         (name-no-ext (file-name-sans-extension backup-name))
+         (prefix (concat base "#")))
+    (when (string-prefix-p prefix name-no-ext)
+      (let ((timestamp (string-remove-prefix prefix name-no-ext)))
+        (when (string-match-p (concat "\\`" real-backup--time-match-regexp "\\'") timestamp)
+          (list :display (apply (apply-partially #'format "%s-%s-%s %s:%s:%s")
+                                (split-string timestamp "-"))
+                :file backup-name
+                :timestamp timestamp
+                :path (expand-file-name backup-name backup-dir)))))))
+
+(defun real-backup--backup-entries (filename)
+  "Return sorted backup entries for FILENAME."
+  (let* ((backup-filename (real-backup-compute-location filename))
+         (backup-dir (file-name-directory backup-filename))
+         (base (file-name-nondirectory backup-filename))
+         (pattern (concat "^" (regexp-quote base) "#"
+                          real-backup--time-match-regexp
+                          "\\(\\.[[:alnum:]]+\\)?$")))
+    (if (file-directory-p backup-dir)
+        (sort (delq nil
+                    (mapcar (lambda (name)
+                              (real-backup--parse-backup-entry filename name backup-dir))
+                            (directory-files backup-dir nil pattern)))
+              (lambda (a b)
+                (string< (plist-get a :timestamp) (plist-get b :timestamp))))
+      nil)))
 
 (defun real-backup-backups-of-file (filename)
   "List of backups for FILENAME."
-  (let* ((backup-filename (real-backup-compute-location filename))
-         (backup-dir (file-name-directory backup-filename)))
-    (directory-files backup-dir nil (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
+  (mapcar (lambda (entry) (plist-get entry :file))
+          (real-backup--backup-entries filename)))
 
 (defun real-backup--format-as-date (orig-name backup-name)
   "Format ORIG-NAME and BACKUP-NAME as a date."
@@ -220,11 +288,18 @@ When UNIQUE is provided, add a unique timestamp after the file name."
   (interactive (list buffer-file-name))
   (if (not filename)
       (user-error "This buffer is not visiting a file")
-    (let* ((backup-dir (file-name-directory (real-backup-compute-location filename)))
-           (backup-files (real-backup-backups-of-file filename)))
-      (dolist (file (cl-set-difference backup-files (last backup-files real-backup-cleanup-keep) :test #'string=))
-        (let ((fname (expand-file-name file backup-dir)))
-          (delete-file fname t))))))
+    (let* ((entries (real-backup--backup-entries filename))
+           (keep (max 0 (or real-backup-cleanup-keep 0)))
+           (to-delete (if (= keep 0)
+                          entries
+                        (butlast entries keep))))
+      (dolist (entry to-delete)
+        (condition-case err
+            (delete-file (plist-get entry :path) t)
+          (error
+           (real-backup--warn "Failed to delete backup %s: %s"
+                              (abbreviate-file-name (plist-get entry :path))
+                              (error-message-string err))))))))
 
 (defun real-backup--completing-read-candidate (candidates)
   "Return the currently highlighted candidate during `completing-read'.
@@ -247,8 +322,8 @@ best match for the current minibuffer input is returned."
           (car candidates))))))
 
 (defun real-backup--find-first-diff-pos (old-text new-text)
-  "Return the 0-based index of the first differing character between OLD-TEXT and NEW-TEXT.
-Returns nil when the two strings are identical."
+  "Return first differing index between OLD-TEXT and NEW-TEXT.
+The returned index is 0-based.  Return nil when both strings are identical."
   (let ((result (compare-strings old-text nil nil new-text nil nil)))
     (unless (eq result t)
       (1- (abs result)))))
@@ -278,11 +353,10 @@ ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
       (when (file-exists-p old-tmp) (delete-file old-tmp))
       (when (file-exists-p new-tmp) (delete-file new-tmp)))))
 
-(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf target-win label &optional prev-content)
+(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf label &optional prev-content)
   "Display a preview of BACKUP-NAME from BACKUP-DIR in PREVIEW-BUF.
 ORIG-MODE is called to activate the appropriate major mode, LABEL is
-shown in the buffer's header line, and TARGET-WIN is the window in which
-the preview will be shown.  When PREV-CONTENT is non-nil and
+shown in the buffer's header line.  When PREV-CONTENT is non-nil and
 `real-backup-preview-jump-to-first-change' is non-nil, point is moved to
 the first position that differs from PREV-CONTENT.  Returns the buffer
 contents as a string, or nil if the file is not readable."
@@ -330,8 +404,10 @@ contents as a string, or nil if the file is not readable."
          (orig-buf (current-buffer))
          (orig-win (selected-window))
          (backup-dir (file-name-directory (real-backup-compute-location filename)))
-         (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename)
-                               (real-backup-backups-of-file filename)))
+         (backup-entries (real-backup--backup-entries filename))
+         (backup-files (mapcar (lambda (entry)
+                                 (cons (plist-get entry :display) (plist-get entry :file)))
+                               backup-entries))
          (candidates (mapcar #'car backup-files))
          (preview-buf (get-buffer-create " *real-backup-preview*"))
          (diff-buf (and real-backup-preview-show-diff (get-buffer-create " *real-backup-diff*")))
@@ -348,8 +424,8 @@ contents as a string, or nil if the file is not readable."
                 (let ((prev-content last-preview-content))
                   (setq last-preview current)
                   (setq last-preview-content
-                        (real-backup--show-preview
-                         backup-name backup-dir orig-mode preview-buf orig-win
+                         (real-backup--show-preview
+                         backup-name backup-dir orig-mode preview-buf
                          (format "--- Preview: Real Backup of %s @ %s %%-"
                                  (file-name-nondirectory filename) current)
                          prev-content))
@@ -366,18 +442,24 @@ contents as a string, or nil if the file is not readable."
                      (if real-backup-preview-diff-against-current-file
                          " (vs. current file)"
                        " (vs. previous candidate)"))))))))
-         (selected
-          (unwind-protect
-              (minibuffer-with-setup-hook
-                  (lambda () (add-hook 'post-command-hook do-preview nil t))
-                (completing-read "Select version: " candidates nil t))
-            (when (buffer-live-p preview-buf)
-              (kill-buffer preview-buf))
-            (when (and diff-buf (buffer-live-p diff-buf))
-              (kill-buffer diff-buf))
-            (when (window-live-p orig-win)
-              (set-window-buffer orig-win orig-buf))))
-         (backup-file (alist-get selected backup-files nil nil #'equal)))
+          (selected
+           (if (null candidates)
+               (user-error "No backups found for %s" (file-name-nondirectory filename))
+             (unwind-protect
+                 (minibuffer-with-setup-hook
+                     (lambda () (add-hook 'post-command-hook do-preview nil t))
+                   (completing-read "Select version: " candidates nil t))
+               (when-let* ((win (get-buffer-window preview-buf t)))
+                 (ignore-errors (delete-window win)))
+               (when-let* ((win (and diff-buf (get-buffer-window diff-buf t))))
+                 (ignore-errors (delete-window win)))
+               (when (buffer-live-p preview-buf)
+                 (kill-buffer preview-buf))
+               (when (and diff-buf (buffer-live-p diff-buf))
+                 (kill-buffer diff-buf))
+               (when (window-live-p orig-win)
+                 (set-window-buffer orig-win orig-buf)))))
+          (backup-file (alist-get selected backup-files nil nil #'equal)))
     (if backup-file
         (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
           (funcall orig-mode)
@@ -392,7 +474,7 @@ contents as a string, or nil if the file is not readable."
       (user-error "No backup version selected"))))
 
 (defun real-backup-turn-on ()
-  (unless (derived-mode-p real-backup-global-excluded-modes)
+  (unless (apply #'derived-mode-p real-backup-global-excluded-modes)
     (real-backup-mode 1)))
 
 ;;;###autoload
@@ -402,8 +484,8 @@ contents as a string, or nil if the file is not readable."
   :lighter " Backup"
   :global nil
   (if real-backup-mode
-      (add-hook 'after-save-hook 'real-backup)
-    (remove-hook 'after-save-hook 'real-backup)))
+      (add-hook 'after-save-hook #'real-backup nil t)
+    (remove-hook 'after-save-hook #'real-backup t)))
 
 ;;;###autoload
 (define-globalized-minor-mode global-real-backup-mode real-backup-mode real-backup-turn-on)

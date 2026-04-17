@@ -14,21 +14,15 @@ multiple saves of the same file unique.  Never lose old saved
 versions again.
 
 To activate globally, place this file in your `load-path`, and add
-the following lines to your ~/.emacs file:
+the following lines to your init file:
 
     (require 'real-backup)
-    (add-hook 'after-save-hook 'real-backup)
+    (global-real-backup-mode 1)
 
-To activate only for individual files, add the require line as
-above to your ~/.emacs, and place a local variables entry at the
-end of your file containing the statement:
+To activate only for individual modes, add the require line as
+above to your init.el and hook like this:
 
-    (add-hook (make-local-variable 'after-save-hook) 'real-backup)
-
-NOTE:  I would give a full example of how to do this here, but it
-would then try to activate it for this file since it is a short
-file and the docs would then be within the "end of the file" local
-variables region.  :)
+    (add-hook 'python-mode-hook 'real-backup-mode)
 
 To filter out which files it backs up, use a custom function for
 `real-backup-filter-function`.  For example, to filter out
@@ -72,7 +66,7 @@ The root directory when to create backups.
 
 Whether to backup remote files at each save.
 
-Defaults to nil.
+Defaults to t.
 
 #### `real-backup-filter-function`
 
