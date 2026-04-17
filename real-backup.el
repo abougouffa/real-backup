@@ -161,17 +161,28 @@ previously previewed candidate and the current one."
 (defconst real-backup--time-match-regexp "[[:digit:]]\\{4\\}\\(-[[:digit:]]\\{2\\}\\)\\{5\\}"
   "A regexp that matches `real-backup--time-format'.")
 
+(defun real-backup--warn (fmt &rest args)
+  "Show a warning message using FMT with ARGS."
+  (display-warning 'real-backup (apply #'format fmt args) :warning))
+
 (defun real-backup--make-a-copy (orig-filename backup-filename)
   "Make a copy for ORIG-FILENAME to BACKUP-FILENAME."
-  (let ((jka-compr-verbose nil))
-    (with-auto-compression-mode
-      (with-temp-buffer
-        (insert-file-contents orig-filename)
-        (write-region nil nil (concat backup-filename
-                                      (if (symbolp real-backup-compression)
-                                          (concat "." (symbol-name real-backup-compression))
-                                        ""))
-                      nil 0)))))
+  (let ((target-filename (if-let* ((ext (and real-backup-compression (symbol-name real-backup-compression))))
+                             (concat backup-filename "." ext)
+                           backup-filename)))
+    (condition-case err
+        (if real-backup-compression
+            (let ((jka-compr-verbose nil))
+              (with-auto-compression-mode
+                (with-temp-buffer
+                  (insert-file-contents orig-filename)
+                  (write-region nil nil target-filename nil 'silent))))
+          (copy-file orig-filename target-filename t t t))
+      (error
+       (real-backup--warn "Failed to backup %s: %s"
+                          (abbreviate-file-name orig-filename)
+                          (error-message-string err))
+       nil))))
 
 (defun real-backup ()
   "Perform a backup of the current file if needed."
