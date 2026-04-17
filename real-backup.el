@@ -185,7 +185,7 @@ previously previewed candidate and the current one."
               (with-auto-compression-mode
                 (with-temp-buffer
                   (insert-file-contents orig-filename)
-                  (write-region nil nil target nil 'silent))))
+                  (write-region nil nil target nil 0))))
           (copy-file orig-filename target t t t))
       (error
        (real-backup--warn "Failed to backup %s: %s"
