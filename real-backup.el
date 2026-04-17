@@ -125,6 +125,11 @@ Relevant when `real-backup-remote-files' is non-nil."
   :group 'real-backup
   :type 'boolean)
 
+(defcustom real-backup-cleanup-to-trash nil
+  "Delete files to trash when cleaning up."
+  :group 'real-backup
+  :type 'boolean)
+
 (defcustom real-backup-show-header t
   "Show a header when vienwing a backup file."
   :group 'real-backup
@@ -251,11 +256,11 @@ When UNIQUE is provided, add a unique timestamp after the file name."
   (interactive (list buffer-file-name))
   (if (not filename)
       (user-error "This buffer is not visiting a file")
-    (let* ((backup-dir (file-name-directory (real-backup-compute-location filename)))
-           (backup-files (real-backup-backups-of-file filename)))
-      (dolist (file (cl-set-difference backup-files (last backup-files real-backup-cleanup-keep) :test #'string=))
-        (let ((fname (expand-file-name file backup-dir)))
-          (delete-file fname t))))))
+    (dolist (old-backup (butlast (real-backup-backups-of-file filename) real-backup-cleanup-keep))
+      (condition-case err
+          (delete-file old-backup real-backup-cleanup-to-trash)
+        (error
+         (real-backup--warn "Failed to delete backup %s: %s" (abbreviate-file-name (plist-get entry :path)) (error-message-string err)))))))
 
 (defun real-backup--completing-read-candidate (candidates)
   "Return the currently highlighted candidate during `completing-read'.
