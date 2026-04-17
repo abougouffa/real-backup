@@ -6,7 +6,7 @@
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Keywords: files, convenience
-;; Version: 3.3
+;; Version: 4.0
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "28.1"))
 
@@ -62,6 +62,10 @@
 ;; - v3.4:
 ;;   - make `real-backup-open-backup' obsolete, use `real-backup-open' instead
 ;;   - better diffs
+;; - v4.0:
+;;   - make `real-backup-mode' local and add globalized mode
+;;   - add `real-backup-global-excluded-modes'
+;;   - update the documentation
 
 ;;; Code:
 
