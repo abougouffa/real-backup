@@ -314,11 +314,10 @@ ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
       (when (file-exists-p old-tmp) (delete-file old-tmp))
       (when (file-exists-p new-tmp) (delete-file new-tmp)))))
 
-(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf target-win label &optional prev-content)
+(defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf label &optional prev-content)
   "Display a preview of BACKUP-NAME from BACKUP-DIR in PREVIEW-BUF.
 ORIG-MODE is called to activate the appropriate major mode, LABEL is
-shown in the buffer's header line, and TARGET-WIN is the window in which
-the preview will be shown.  When PREV-CONTENT is non-nil and
+shown in the buffer's header line.  When PREV-CONTENT is non-nil and
 `real-backup-preview-jump-to-first-change' is non-nil, point is moved to
 the first position that differs from PREV-CONTENT.  Returns the buffer
 contents as a string, or nil if the file is not readable."
@@ -385,7 +384,7 @@ contents as a string, or nil if the file is not readable."
                   (setq last-preview current)
                   (setq last-preview-content
                         (real-backup--show-preview
-                         backup-name backup-dir orig-mode preview-buf orig-win
+                         backup-name backup-dir orig-mode preview-buf
                          (format "--- Preview: Real Backup of %s @ %s %%-"
                                  (file-name-nondirectory filename) current)
                          prev-content))
