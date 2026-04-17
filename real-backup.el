@@ -97,6 +97,11 @@ Defaults to nil."
   :group 'real-backup
   :type 'function)
 
+(defcustom real-backup-global-excluded-modes nil
+  "A list of modes to be excluded when enabling globally."
+  :group 'real-backup
+  :type '(repeat symbol))
+
 (defcustom real-backup-size-limit (* 1 1024 1024)
   "Maximum size of a file (in bytes) that should be copied at each savepoint.
 
@@ -389,15 +394,22 @@ contents as a string, or nil if the file is not readable."
           (read-only-mode 1))
       (user-error "No backup version selected"))))
 
+(defun real-backup-turn-on ()
+  (unless (derived-mode-p real-backup-global-excluded-modes)
+    (real-backup-mode 1)))
+
 ;;;###autoload
 (define-minor-mode real-backup-mode
   "Automatically backup files after saving them."
   :init-value nil
   :lighter " Backup"
-  :global t
+  :global nil
   (if real-backup-mode
       (add-hook 'after-save-hook 'real-backup)
     (remove-hook 'after-save-hook 'real-backup)))
+
+;;;###autoload
+(define-globalized-minor-mode global-real-backup-mode real-backup-mode real-backup-turn-on)
 
 
 (provide 'real-backup)
