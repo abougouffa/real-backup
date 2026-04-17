@@ -6,7 +6,7 @@
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Keywords: files, convenience
-;; Version: 4.0
+;; Version: 4.1
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "28.1"))
 
@@ -66,6 +66,13 @@
 ;;   - make `real-backup-mode' local and add globalized mode
 ;;   - add `real-backup-global-excluded-modes'
 ;;   - update the documentation
+;; - v4.1
+;;   - add a separate file size limit for remote files
+;;   - better cleanup with optional send to trash customization
+;;   - reproducible window layout when previewing backups and diffs
+;;   - better documentation
+;;   - several bug fixes
+
 
 ;;; Code:
 
