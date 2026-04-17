@@ -184,15 +184,29 @@ previously previewed candidate and the current one."
                           (error-message-string err))
        nil))))
 
+(defun real-backup--ensure-backup-dir (backup-filename)
+  "Ensure parent directory for BACKUP-FILENAME exists and is writable."
+  (condition-case err
+      (let ((dir (file-name-directory backup-filename)))
+        (make-directory (file-name-directory backup-filename) t)
+        (file-writable-p dir))
+    (error (real-backup--warn "Failed to create backup directory for %s: %s"
+                              (abbreviate-file-name backup-filename)
+                              (error-message-string err))
+           nil)))
+
 (defun real-backup ()
   "Perform a backup of the current file if needed."
   (when-let* ((filename (buffer-file-name))
               (backup-filename (real-backup-compute-location filename 'unique)))
-    (when (and (or real-backup-remote-files (not (file-remote-p filename)))
-               (funcall real-backup-filter-function filename)
-               (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit)))
-      (real-backup--make-a-copy filename backup-filename)
-      (when real-backup-auto-cleanup (real-backup-cleanup filename)))))
+    (and (or real-backup-remote-files ; enable on remote files
+             (and (not (file-remote-p filename)) ; local file
+                  (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit)))) ; and acceptable size
+         (funcall real-backup-filter-function filename) ; file not filtered out
+         (real-backup--ensure-backup-dir backup-filename) ; directory exists and writable
+         (real-backup--make-a-copy filename backup-filename) ; do make a backup of the file
+         real-backup-auto-cleanup ; cleanup if necessary
+         (real-backup-cleanup filename)))))
 
 (defun real-backup-compute-location (filename &optional unique)
   "Compute backup location for FILENAME.
@@ -209,9 +223,7 @@ When UNIQUE is provided, add a unique timestamp after the file name."
                              (concat (upcase (match-string 1 containing-dir)) (match-string 2 containing-dir))
                            containing-dir))
          (backup-dir (file-name-concat real-backup-directory method host user containing-dir))
-         (backup-basename (format "%s%s" (file-name-nondirectory localname) (if unique (concat "#" (format-time-string real-backup--time-format)) ""))))
-    (unless (file-exists-p backup-dir)
-      (make-directory backup-dir t))
+         (backup-basename (concat (file-name-nondirectory localname) (when unique (concat "#" (format-time-string real-backup--time-format))))))
     (expand-file-name backup-basename backup-dir)))
 
 (defun real-backup-backups-of-file (filename)
