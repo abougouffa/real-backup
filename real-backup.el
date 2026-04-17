@@ -438,8 +438,8 @@ contents as a string, or nil if the file is not readable."
   :lighter " Backup"
   :global nil
   (if real-backup-mode
-      (add-hook 'after-save-hook 'real-backup)
-    (remove-hook 'after-save-hook 'real-backup)))
+      (add-hook 'after-save-hook #'real-backup nil t)
+    (remove-hook 'after-save-hook #'real-backup t)))
 
 ;;;###autoload
 (define-globalized-minor-mode global-real-backup-mode real-backup-mode real-backup-turn-on)
