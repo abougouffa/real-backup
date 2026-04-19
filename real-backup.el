@@ -320,6 +320,11 @@ ORIG-FILENAME and DIFF-LABEL are used in the buffer's header line."
       (when (file-exists-p old-tmp) (delete-file old-tmp))
       (when (file-exists-p new-tmp) (delete-file new-tmp)))))
 
+(defun real-backup--buffer-string (&optional buf)
+  "Buffer string (with no properties) of BUF or the current buffer."
+  (with-current-buffer (or buf (current-buffer))
+    (buffer-substring-no-properties (point-min) (point-max))))
+
 (defun real-backup--show-preview (backup-name backup-dir orig-mode preview-buf label &optional prev-content)
   "Display a preview of BACKUP-NAME from BACKUP-DIR in PREVIEW-BUF.
 ORIG-MODE is called to activate the appropriate major mode, LABEL is
@@ -339,7 +344,7 @@ contents as a string, or nil if the file is not readable."
           (font-lock-ensure) ; Force synchronous fontification
           (display-line-numbers-mode 1)
           (setq buffer-read-only t)
-          (let* ((new-content (buffer-string))
+          (let* ((new-content (real-backup--buffer-string))
                  (jump-pos
                   (if (and real-backup-preview-jump-to-first-change prev-content)
                       (let ((diff-pos (real-backup--find-first-diff-pos prev-content new-content)))
@@ -377,7 +382,9 @@ contents as a string, or nil if the file is not readable."
          (diff-buf (and real-backup-preview-show-diff (get-buffer-create " *real-backup-diff*")))
          (current-file-content
           (and diff-buf real-backup-preview-diff-against-current-file
-               (with-temp-buffer (insert-file-contents filename) (buffer-string))))
+               (with-temp-buffer
+                 (insert-file-contents filename)
+                 (real-backup--buffer-string))))
          (last-preview nil)
          (last-preview-content nil)
          (do-preview
