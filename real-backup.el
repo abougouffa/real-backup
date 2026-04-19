@@ -247,7 +247,7 @@ When UNIQUE is provided, add a unique timestamp after the file name."
     (expand-file-name backup-basename backup-dir)))
 
 (defun real-backup-backups-of-file (filename)
-  "List of backups for FILENAME."
+  "Sorted list of backups for FILENAME."
   (let* ((backup-filename (real-backup-compute-location filename))
          (backup-dir (file-name-directory backup-filename)))
     (directory-files backup-dir nil (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
@@ -377,7 +377,7 @@ contents as a string, or nil if the file is not readable."
          (backup-dir (file-name-directory (real-backup-compute-location filename)))
          (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename)
                                (real-backup-backups-of-file filename)))
-         (candidates (mapcar #'car backup-files))
+         (candidates (reverse (mapcar #'car backup-files)))
          (preview-buf (get-buffer-create " *real-backup-preview*"))
          (diff-buf (and real-backup-preview-show-diff (get-buffer-create " *real-backup-diff*")))
          (current-file-content
@@ -425,7 +425,9 @@ contents as a string, or nil if the file is not readable."
                 ;; Do completion with preview
                 (minibuffer-with-setup-hook
                     (lambda () (add-hook 'post-command-hook do-preview nil t))
-                  (completing-read "Select version: " candidates nil t)))
+                  (let ((vertico-sort-function nil)
+                        (completions-sort nil))
+                    (completing-read "Select version: " candidates nil t))))
             (when (buffer-live-p preview-buf)
               (kill-buffer preview-buf))
             (when (and diff-buf (buffer-live-p diff-buf))
