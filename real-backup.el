@@ -79,6 +79,7 @@
 (autoload 'cl-set-difference "cl-seq")
 (autoload 'string-remove-prefix "subr-x")
 (autoload 'diff-no-select "diff")
+(autoload 'with-auto-compression-mode "jka-cmpr-hook")
 
 (defgroup real-backup nil
   "Real Backup."
