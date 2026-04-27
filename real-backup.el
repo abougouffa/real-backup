@@ -6,7 +6,7 @@
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Keywords: files, convenience
-;; Version: 4.1
+;; Version: 4.2
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "28.1"))
 
@@ -72,6 +72,10 @@
 ;;   - reproducible window layout when previewing backups and diffs
 ;;   - better documentation
 ;;   - several bug fixes
+;; - v4.2:
+;;   - add `real-backup-restore' to restore the original file from an open backup
+;;   - add `real-backup-open-arbitrary' to open a backup for any backed-up file
+;;     using step-by-step completion over existing backups
 
 
 ;;; Code:
@@ -448,6 +452,106 @@ contents as a string, or nil if the file is not readable."
                               'face 'warning)))
           (read-only-mode 1))
       (user-error "No backup version selected"))))
+
+(defun real-backup--parse-backup-path (backup-path)
+  "Parse BACKUP-PATH and return a plist with :method, :host, :user, :localname.
+BACKUP-PATH must be a file residing under `real-backup-directory'."
+  (let* ((backup-root (file-name-as-directory (expand-file-name real-backup-directory)))
+         (rel (file-relative-name (expand-file-name backup-path) backup-root))
+         (parts (split-string rel "/" t))
+         (method (nth 0 parts))
+         (host (nth 1 parts))
+         (user (nth 2 parts))
+         ;; Basename carries the timestamp: orig-name#TIMESTAMP[.ext]
+         (bare (car (last parts)))
+         ;; Drop #TIMESTAMP[.ext] to recover the original file name
+         (orig-name (car (split-string bare "#")))
+         ;; The path components between the user entry and the filename
+         (dir-parts (butlast (nthcdr 3 parts)))
+         (localname (concat "/"
+                            (when dir-parts
+                              (concat (mapconcat #'identity dir-parts "/") "/"))
+                            orig-name)))
+    (list :method method :host host :user user :localname localname)))
+
+(defun real-backup--original-from-backup (backup-path)
+  "Return the original file path corresponding to BACKUP-PATH."
+  (let* ((parsed (real-backup--parse-backup-path backup-path))
+         (method (plist-get parsed :method))
+         (host (plist-get parsed :host))
+         (user (plist-get parsed :user))
+         (localname (plist-get parsed :localname)))
+    (if (equal method "local")
+        localname
+      (format "/%s:%s@%s:%s" method user host localname))))
+
+;;;###autoload
+(defun real-backup-restore ()
+  "Restore the original file from the backup currently visited in the buffer.
+The current buffer must be visiting a backup file opened with `real-backup-open'."
+  (interactive)
+  (let* ((backup-path (buffer-file-name))
+         (backup-root (file-name-as-directory (expand-file-name real-backup-directory))))
+    (unless backup-path
+      (user-error "This buffer is not visiting a file"))
+    (unless (string-prefix-p backup-root (expand-file-name backup-path))
+      (user-error "This buffer is not visiting a real-backup file"))
+    (let* ((original (real-backup--original-from-backup backup-path))
+           (backup-name (file-name-nondirectory backup-path)))
+      (unless (yes-or-no-p (format "Restore \"%s\" from backup \"%s\"? "
+                                   (abbreviate-file-name original) backup-name))
+        (user-error "Restore cancelled"))
+      (condition-case err
+          (progn
+            (let ((jka-compr-verbose nil))
+              (with-auto-compression-mode
+                (let ((content (with-temp-buffer
+                                 (insert-file-contents backup-path)
+                                 (buffer-string))))
+                  (with-temp-buffer
+                    (insert content)
+                    (write-region nil nil original nil 'silent)))))
+            (when-let* ((buf (find-buffer-visiting original)))
+              (with-current-buffer buf
+                (revert-buffer t t)))
+            (message "Restored \"%s\"" (abbreviate-file-name original)))
+        (error
+         (user-error "Failed to restore %s: %s"
+                     (abbreviate-file-name original)
+                     (error-message-string err)))))))
+
+;;;###autoload
+(defun real-backup-open-arbitrary ()
+  "Open a backup for an arbitrary backed-up file using step-by-step completion.
+Prompts for method, host, user, and file in sequence, offering only choices
+that correspond to existing backups.  Calls `real-backup-open' on the result."
+  (interactive)
+  (let ((backup-root (file-name-as-directory (expand-file-name real-backup-directory))))
+    (unless (file-directory-p backup-root)
+      (user-error "No backups found in %s" backup-root))
+    (let* ((methods (seq-filter (lambda (f) (file-directory-p (expand-file-name f backup-root)))
+                                (directory-files backup-root nil "^[^.]")))
+           (_ (unless methods (user-error "No backup methods found")))
+           (method (completing-read "Method: " methods nil t))
+           (method-dir (expand-file-name method backup-root))
+           (hosts (seq-filter (lambda (f) (file-directory-p (expand-file-name f method-dir)))
+                              (directory-files method-dir nil "^[^.]")))
+           (_ (unless hosts (user-error "No hosts found for method \"%s\"" method)))
+           (host (completing-read "Host: " hosts nil t))
+           (host-dir (expand-file-name host method-dir))
+           (users (seq-filter (lambda (f) (file-directory-p (expand-file-name f host-dir)))
+                              (directory-files host-dir nil "^[^.]")))
+           (_ (unless users (user-error "No users found for %s/%s" method host)))
+           (user (completing-read "User: " users nil t))
+           (user-dir (expand-file-name user host-dir))
+           (backup-files (directory-files-recursively
+                          user-dir
+                          (concat (regexp-quote "#") real-backup--time-match-regexp)))
+           (_ (unless backup-files
+                (user-error "No backups found for %s/%s/%s" method host user)))
+           (originals (delete-dups (mapcar #'real-backup--original-from-backup backup-files)))
+           (selected (completing-read "File: " originals nil t)))
+      (real-backup-open selected))))
 
 (defun real-backup-turn-on ()
   (unless (derived-mode-p real-backup-global-excluded-modes)
