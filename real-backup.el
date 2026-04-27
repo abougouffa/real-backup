@@ -464,8 +464,13 @@ BACKUP-PATH must be a file residing under `real-backup-directory'."
          (user (nth 2 parts))
          ;; Basename carries the timestamp: orig-name#TIMESTAMP[.ext]
          (bare (car (last parts)))
-         ;; Drop #TIMESTAMP[.ext] to recover the original file name
-         (orig-name (car (split-string bare "#")))
+         ;; Drop the trailing #TIMESTAMP[.ext] to recover the original file name.
+         ;; Using a regexp avoids truncating filenames that legitimately contain '#'.
+         (orig-name (if (string-match (concat "#" real-backup--time-match-regexp
+                                              "\\(\\.[[:alnum:]]+\\)?$")
+                                      bare)
+                        (substring bare 0 (match-beginning 0))
+                      bare))
          ;; The path components between the user entry and the filename
          (dir-parts (butlast (nthcdr 3 parts)))
          (localname (concat "/"
@@ -505,12 +510,9 @@ The current buffer must be visiting a backup file opened with `real-backup-open'
           (progn
             (let ((jka-compr-verbose nil))
               (with-auto-compression-mode
-                (let ((content (with-temp-buffer
-                                 (insert-file-contents backup-path)
-                                 (buffer-string))))
-                  (with-temp-buffer
-                    (insert content)
-                    (write-region nil nil original nil 'silent)))))
+                (with-temp-buffer
+                  (insert-file-contents backup-path)
+                  (write-region nil nil original nil 'silent))))
             (when-let* ((buf (find-buffer-visiting original)))
               (with-current-buffer buf
                 (revert-buffer t t)))
