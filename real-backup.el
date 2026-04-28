@@ -363,13 +363,49 @@ contents as a string, or nil if the file is not readable."
                   (pulse-momentary-highlight-one-line (point)))))
             new-content))))))
 
+(defun real-backup--ask-for-backup ()
+  "Get the original file name for an arbitrary backed-up file.
+
+Prompts for method, host, user, and file in sequence, offering only
+choices that correspond to existing backups. Returns the selected file
+path."
+  (interactive)
+  (let ((backup-root (file-name-as-directory (expand-file-name real-backup-directory))))
+    (unless (file-directory-p backup-root)
+      (user-error "No backups found in %s" backup-root))
+    (let* ((methods (seq-filter (lambda (f) (file-directory-p (expand-file-name f backup-root)))
+                                (directory-files backup-root nil "^[^.]")))
+           (_ (unless methods (user-error "No backup methods found")))
+           (method (completing-read "Method: " methods nil t))
+           (method-dir (expand-file-name method backup-root))
+           (hosts (seq-filter (lambda (f) (file-directory-p (expand-file-name f method-dir)))
+                              (directory-files method-dir nil "^[^.]")))
+           (_ (unless hosts (user-error "No hosts found for method \"%s\"" method)))
+           (host (completing-read "Host: " hosts nil t))
+           (host-dir (expand-file-name host method-dir))
+           (users (seq-filter (lambda (f) (file-directory-p (expand-file-name f host-dir)))
+                              (directory-files host-dir nil "^[^.]")))
+           (_ (unless users (user-error "No users found for %s/%s" method host)))
+           (user (completing-read "User: " users nil t))
+           (user-dir (expand-file-name user host-dir))
+           (backup-files (directory-files-recursively
+                          user-dir
+                          (concat (regexp-quote "#") real-backup--time-match-regexp)))
+           (_ (unless backup-files
+                (user-error "No backups found for %s/%s/%s" method host user)))
+           (originals (delete-dups (mapcar #'real-backup--original-from-backup backup-files)))
+           (selected (completing-read "File: " originals nil t)))
+      selected)))
+
 ;;;###autoload
 (define-obsolete-function-alias 'real-backup-open-backup 'real-backup-open "3.4" "Open a backup of FILENAME or the current buffer.")
 
 ;;;###autoload
 (defun real-backup-open (filename)
-  "Open a backup of FILENAME or the current buffer."
-  (interactive (list buffer-file-name))
+  "Open a backup of FILENAME, current buffer or arbitrary backup when called with prefix arg."
+  (interactive (if current-prefix-arg
+                   (list (real-backup--ask-for-backup))
+                 (list buffer-file-name)))
   (unless filename
     (user-error "This buffer is not visiting a file"))
   (let* ((orig-mode major-mode)
