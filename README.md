@@ -65,6 +65,11 @@ the saving of GPG encypted files, do:
   - reproducible window layout when previewing backups and diffs
   - better documentation
   - several bug fixes
+- v4.2:
+  - add `real-backup-restore` to restore the original file from an open backup
+  - add `real-backup-open` can now open any backed-up file using step-by-step
+  - completion over existing backups
+  - add `real-backup-view-mode` with some local bindigs
 
 
 
@@ -154,7 +159,7 @@ When UNIQUE is provided, add a unique timestamp after the file name.
 
 #### `(real-backup-backups-of-file FILENAME)`
 
-List of backups for FILENAME.
+Sorted list of backups for FILENAME.
 
 #### `(real-backup-cleanup FILENAME)`
 
@@ -162,7 +167,12 @@ Cleanup backups of FILENAME, keeping `real-backup-cleanup-keep` copies.
 
 #### `(real-backup-open FILENAME)`
 
-Open a backup of FILENAME or the current buffer.
+Open a backup of FILENAME, current buffer or arbitrary backup when called with prefix arg.
+
+#### `(real-backup-restore)`
+
+Restore the original file from the backup currently visited in the buffer.
+The current buffer must be visiting a backup file opened with `real-backup-open`.
 
 -----
 <div style="padding-top:15px;color: #d0d0d0;">
