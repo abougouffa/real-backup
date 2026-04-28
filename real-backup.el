@@ -498,7 +498,9 @@ path."
 
 (define-minor-mode real-backup-view-mode
   "A minor mode for viewing real backups."
-  (read-only-mode 1))
+  :initial-value nil
+  (when real-backup-view-mode
+    (read-only-mode 1)))
 
 (defun real-backup--parse-backup-path (backup-path)
   "Parse BACKUP-PATH and return a plist with :method, :host, :user, :localname.
