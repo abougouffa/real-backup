@@ -6,9 +6,9 @@
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Keywords: files, convenience
-;; Version: 4.1
+;; Version: 4.2
 ;; URL: https://github.com/abougouffa/real-backup
-;; Package-Requires: ((emacs "28.1"))
+;; Package-Requires: ((emacs "29.1"))
 
 ;;; Commentary:
 
@@ -72,6 +72,11 @@
 ;;   - reproducible window layout when previewing backups and diffs
 ;;   - better documentation
 ;;   - several bug fixes
+;; - v4.2:
+;;   - add `real-backup-restore' to restore the original file from an open backup
+;;   - add `real-backup-open' can now open any backed-up file using step-by-step
+;;   - completion over existing backups
+;;   - add `real-backup-view-mode' with some local bindigs
 
 
 ;;; Code:
