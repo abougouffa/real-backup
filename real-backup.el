@@ -449,6 +449,43 @@ contents as a string, or nil if the file is not readable."
           (read-only-mode 1))
       (user-error "No backup version selected"))))
 
+(defun real-backup--parse-backup-path (backup-path)
+  "Parse BACKUP-PATH and return a plist with :method, :host, :user, :localname.
+BACKUP-PATH must be a file residing under `real-backup-directory'."
+  (let* ((backup-root (file-name-as-directory (expand-file-name real-backup-directory)))
+         (rel (file-relative-name (expand-file-name backup-path) backup-root))
+         (parts (split-string rel "/" t))
+         (method (nth 0 parts))
+         (host (nth 1 parts))
+         (user (nth 2 parts))
+         ;; Basename carries the timestamp: orig-name#TIMESTAMP[.ext]
+         (bare (car (last parts)))
+         ;; Drop the trailing #TIMESTAMP[.ext] to recover the original file name.
+         ;; Using a regexp avoids truncating filenames that legitimately contain '#'.
+         (orig-name (if (string-match (concat "#" real-backup--time-match-regexp
+                                              "\\(\\.[[:alnum:]]+\\)?$")
+                                      bare)
+                        (substring bare 0 (match-beginning 0))
+                      bare))
+         ;; The path components between the user entry and the filename
+         (dir-parts (butlast (nthcdr 3 parts)))
+         (localname (concat "/"
+                            (when dir-parts
+                              (concat (mapconcat #'identity dir-parts "/") "/"))
+                            orig-name)))
+    (list :method method :host host :user user :localname localname)))
+
+(defun real-backup--original-from-backup (backup-path)
+  "Return the original file path corresponding to BACKUP-PATH."
+  (let* ((parsed (real-backup--parse-backup-path backup-path))
+         (method (plist-get parsed :method))
+         (host (plist-get parsed :host))
+         (user (plist-get parsed :user))
+         (localname (plist-get parsed :localname)))
+    (if (equal method "local")
+        localname
+      (format "/%s:%s@%s:%s" method user host localname))))
+
 (defun real-backup-turn-on ()
   (unless (derived-mode-p real-backup-global-excluded-modes)
     (real-backup-mode 1)))
