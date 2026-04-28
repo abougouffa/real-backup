@@ -486,6 +486,38 @@ BACKUP-PATH must be a file residing under `real-backup-directory'."
         localname
       (format "/%s:%s@%s:%s" method user host localname))))
 
+;;;###autoload
+(defun real-backup-restore ()
+  "Restore the original file from the backup currently visited in the buffer.
+The current buffer must be visiting a backup file opened with `real-backup-open'."
+  (interactive)
+  (let* ((backup-path (buffer-file-name))
+         (backup-root (file-name-as-directory (expand-file-name real-backup-directory))))
+    (unless backup-path
+      (user-error "This buffer is not visiting a file"))
+    (unless (string-prefix-p backup-root (expand-file-name backup-path))
+      (user-error "This buffer is not visiting a real-backup file"))
+    (let* ((original (real-backup--original-from-backup backup-path))
+           (backup-name (file-name-nondirectory backup-path))
+           (backup-buf (current-buffer)))
+      (unless (yes-or-no-p (format "Restore \"%s\" from backup \"%s\"? " (abbreviate-file-name original) backup-name))
+        (user-error "Restore cancelled"))
+      (condition-case err
+          (progn
+            (let ((jka-compr-verbose nil))
+              (with-auto-compression-mode
+                (with-temp-buffer
+                  (insert-file-contents backup-path)
+                  (write-region nil nil original nil 'silent))))
+            (when-let* ((buf (find-buffer-visiting original)))
+              (with-current-buffer buf (revert-buffer t t)))
+            (let ((buf (or (find-buffer-visiting original) (find-file-noselect original))))
+              (kill-buffer backup-buf)
+              (display-buffer buf))
+            (message "Restored \"%s\"" (abbreviate-file-name original)))
+        (error
+         (user-error "Failed to restore %s: %s" (abbreviate-file-name original) (error-message-string err)))))))
+
 (defun real-backup-turn-on ()
   (unless (derived-mode-p real-backup-global-excluded-modes)
     (real-backup-mode 1)))
