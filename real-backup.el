@@ -482,8 +482,18 @@ path."
                                       (file-name-nondirectory filename)
                                       (car (real-backup--format-as-date filename backup-file)))
                               'face 'warning)))
-          (read-only-mode 1))
+          (real-backup-view-mode 1))
       (user-error "No backup version selected"))))
+
+(defvar real-backup-view-mode-map
+  (define-keymap
+    "R" #'real-backup-restore
+    "q" #'bury-buffer
+    "Q" #'kill-current-buffer))
+
+(define-minor-mode real-backup-view-mode
+  "A minor mode for viewing real backups."
+  (read-only-mode 1))
 
 (defun real-backup--parse-backup-path (backup-path)
   "Parse BACKUP-PATH and return a plist with :method, :host, :user, :localname.
@@ -548,6 +558,10 @@ The current buffer must be visiting a backup file opened with `real-backup-open'
             (when-let* ((buf (find-buffer-visiting original)))
               (with-current-buffer buf (revert-buffer t t)))
             (let ((buf (or (find-buffer-visiting original) (find-file-noselect original))))
+              ;; TEMP: I don't know why after restoring a file, the "original"
+              ;; file can have `real-backup-view-mode' active! This hack fixes
+              ;; the symptom but not the cause
+              (with-current-buffer buf (real-backup-view-mode -1))
               (kill-buffer backup-buf)
               (display-buffer buf))
             (message "Restored \"%s\"" (abbreviate-file-name original)))
