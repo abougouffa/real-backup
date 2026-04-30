@@ -5,6 +5,7 @@
 
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
+;; Modified: April 30, 2026
 ;; Keywords: files, convenience
 ;; Version: 4.2
 ;; URL: https://github.com/abougouffa/real-backup
@@ -593,3 +594,8 @@ The current buffer must be visiting a backup file opened with `real-backup-open'
 
 (provide 'real-backup)
 ;;; real-backup.el ends here
+
+;; Local Variables:
+;; time-stamp-pattern: "^;; Modified: %%$"
+;; time-stamp-format: "%B %d, %Y"
+;; End:
