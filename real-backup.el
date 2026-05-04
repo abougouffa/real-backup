@@ -375,7 +375,6 @@ contents as a string, or nil if the file is not readable."
 Prompts for method, host, user, and file in sequence, offering only
 choices that correspond to existing backups. Returns the selected file
 path."
-  (interactive)
   (let ((backup-root (file-name-as-directory (expand-file-name real-backup-directory))))
     (unless (file-directory-p backup-root)
       (user-error "No backups found in %s" backup-root))
