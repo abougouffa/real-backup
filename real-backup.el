@@ -5,9 +5,9 @@
 
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
-;; Modified: April 30, 2026
+;; Modified: May 15, 2026
 ;; Keywords: files, convenience
-;; Version: 4.2
+;; Version: 5.0
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "29.1"))
 
@@ -78,6 +78,9 @@
 ;;   - add `real-backup-open' can now open any backed-up file using step-by-step
 ;;   - completion over existing backups
 ;;   - add `real-backup-view-mode' with some local bindigs
+;; - v5.0:
+;;   - code cleanup
+;;   - replace `real-backup-global-excluded-modes' with standard predicate `global-real-backup-modes'
 
 
 ;;; Code:
@@ -107,11 +110,6 @@ When non-nil, remote files will be saved locally."
   "Function which should return non-nil if the file should be backed up."
   :group 'real-backup
   :type 'function)
-
-(defcustom real-backup-global-excluded-modes nil
-  "A list of modes to be excluded when enabling globally."
-  :group 'real-backup
-  :type '(repeat symbol))
 
 (defcustom real-backup-size-limit (* 1 1024 1024)
   "Maximum size of a file (in bytes) that should be copied at each savepoint.
@@ -180,6 +178,9 @@ When nil (the default), the diff window shows changes between the
 previously previewed candidate and the current one."
   :group 'real-backup
   :type 'boolean)
+
+(defvar real-backup-global-excluded-modes nil)
+(make-obsolete-variable 'real-backup-global-excluded-modes 'global-real-backup-modes "5.0")
 
 (defconst real-backup--time-format "%Y-%m-%d-%H-%M-%S"
   "Format given to `format-time-string' which is appended to the filename.")
@@ -576,8 +577,7 @@ The current buffer must be visiting a backup file opened with `real-backup-open'
          (user-error "Failed to restore %s: %s" (abbreviate-file-name original) (error-message-string err)))))))
 
 (defun real-backup-turn-on ()
-  (unless (derived-mode-p real-backup-global-excluded-modes)
-    (real-backup-mode 1)))
+  (real-backup-mode 1))
 
 ;;;###autoload
 (define-minor-mode real-backup-mode
@@ -590,7 +590,8 @@ The current buffer must be visiting a backup file opened with `real-backup-open'
     (remove-hook 'after-save-hook #'real-backup t)))
 
 ;;;###autoload
-(define-globalized-minor-mode global-real-backup-mode real-backup-mode real-backup-turn-on)
+(define-globalized-minor-mode global-real-backup-mode real-backup-mode real-backup-turn-on
+  :predicate t)
 
 
 (provide 'real-backup)
