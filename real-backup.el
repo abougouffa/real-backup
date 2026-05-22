@@ -7,7 +7,7 @@
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Modified: May 23, 2026
 ;; Keywords: files, convenience
-;; Version: 5.1
+;; Version: 5.2
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "29.1"))
 
@@ -83,6 +83,8 @@
 ;; - v5.1:
 ;;   - rename `real-backup-filter-function' to `real-backup-filename-filter-function'
 ;;   - add `real-backup-buffer-filter-function' with default value that skips temporary buffers
+;; - v5.2:
+;;   - fix `real-backup-cleanup' which wasn't cleaning
 
 
 ;;; Code:
