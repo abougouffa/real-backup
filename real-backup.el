@@ -5,7 +5,7 @@
 
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
-;; Modified: May 15, 2026
+;; Modified: May 23, 2026
 ;; Keywords: files, convenience
 ;; Version: 5.0
 ;; URL: https://github.com/abougouffa/real-backup
@@ -106,8 +106,17 @@ When non-nil, remote files will be saved locally."
   :group 'real-backup
   :type 'boolean)
 
-(defcustom real-backup-filter-function #'identity
+(defcustom real-backup-filename-filter-function #'identity
   "Function which should return non-nil if the file should be backed up."
+  :group 'real-backup
+  :type 'function)
+
+(define-obsolete-variable-alias 'real-backup-filter-function 'real-backup-filename-filter-function "5.1")
+
+(defcustom real-backup-buffer-filter-function #'real-backup-save-buffer-p
+  "Function which should return non-nil if a buffer should be backed up.
+
+This function is called from `before-save-hook'."
   :group 'real-backup
   :type 'function)
 
@@ -222,7 +231,17 @@ previously previewed candidate and the current one."
                               (error-message-string err))
            nil)))
 
-(defun real-backup ()
+(defvar-local real-backup-inhibit nil)
+
+(defun real-backup-save-buffer-p (buffer)
+  "Return nil when BUFFER is a temporary buffer."
+  (not (string-match-p "^ \\*temp\\*\\(-[[:digit:]]+\\)?" (buffer-name buffer))))
+
+(defun real-backup-before-save ()
+  "A hook to run in `before-save-hook'."
+  (setq-local real-backup-inhibit (not (funcall real-backup-buffer-filter-function (current-buffer)))))
+
+(defun real-backup-after-save ()
   "Perform a backup of the current file if needed."
   (when-let* ((filename (buffer-file-name))
               (backup-filename (real-backup-compute-location filename 'unique)))
@@ -230,7 +249,8 @@ previously previewed candidate and the current one."
                   (or (not real-backup-size-limit) (<= (buffer-size) real-backup-size-limit))) ; and acceptable size
              (and real-backup-remote-files ; remote file and enabled remote files
                   (or (not real-backup-remote-size-limit) (<= (buffer-size) real-backup-remote-size-limit)))) ; the remote file size limit
-         (funcall real-backup-filter-function filename) ; file not filtered out
+         (not real-backup-inhibit) ; not inhibiting `real-backup' in the current buffer
+         (funcall real-backup-filename-filter-function filename) ; file not filtered out
          (real-backup--ensure-backup-dir backup-filename) ; directory exists and writable
          (real-backup--make-a-copy filename backup-filename) ; do make a backup of the file
          real-backup-auto-cleanup ; cleanup if necessary
@@ -586,8 +606,11 @@ The current buffer must be visiting a backup file opened with `real-backup-open'
   :lighter " Backup"
   :global nil
   (if real-backup-mode
-      (add-hook 'after-save-hook #'real-backup nil t)
-    (remove-hook 'after-save-hook #'real-backup t)))
+      (progn
+        (add-hook 'before-save-hook #'real-backup-before-save nil t)
+        (add-hook 'after-save-hook #'real-backup-after-save nil t))
+    (remove-hook 'before-save-hook #'real-backup-before-save t)
+    (remove-hook 'after-save-hook #'real-backup-after-save t)))
 
 ;;;###autoload
 (define-globalized-minor-mode global-real-backup-mode real-backup-mode real-backup-turn-on
