@@ -276,11 +276,11 @@ When UNIQUE is provided, add a unique timestamp after the file name."
          (backup-basename (concat (file-name-nondirectory localname) (when unique (concat "#" (format-time-string real-backup--time-format))))))
     (expand-file-name backup-basename backup-dir)))
 
-(defun real-backup-backups-of-file (filename)
-  "Sorted list of backups for FILENAME."
+(defun real-backup-backups-of-file (filename &optional full)
+  "Sorted list of backups for FILENAME, return absolete path when FULL is non-nil."
   (let* ((backup-filename (real-backup-compute-location filename))
          (backup-dir (file-name-directory backup-filename)))
-    (directory-files backup-dir nil (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
+    (directory-files backup-dir full (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
 
 (defun real-backup--format-as-date (orig-name backup-name)
   "Format ORIG-NAME and BACKUP-NAME as a date."
@@ -293,11 +293,11 @@ When UNIQUE is provided, add a unique timestamp after the file name."
   (interactive (list buffer-file-name))
   (if (not filename)
       (user-error "This buffer is not visiting a file")
-    (dolist (old-backup (butlast (real-backup-backups-of-file filename) real-backup-cleanup-keep))
+    (dolist (old-backup (butlast (real-backup-backups-of-file filename t) real-backup-cleanup-keep))
       (condition-case err
           (delete-file old-backup real-backup-cleanup-to-trash)
         (error
-         (real-backup--warn "Failed to delete backup %s: %s" (abbreviate-file-name (plist-get entry :path)) (error-message-string err)))))))
+         (real-backup--warn "Failed to delete backup %s: %s" (abbreviate-file-name old-backup) (error-message-string err)))))))
 
 (defun real-backup--completing-read-candidate (candidates)
   "Return the currently highlighted candidate during `completing-read'.
