@@ -6,32 +6,31 @@
 
 This is a fork and reviving of [`backup-each-save`](https://www.emacswiki.org/emacs/BackupEachSave).
 
-Ever wish to go back to an older saved version of a file?  Then
-this package is for you.  This package copies every file you save
-in Emacs to a backup directory tree (which mirrors the tree
-structure of the filesystem), with a timestamp suffix to make
-multiple saves of the same file unique.  Never lose old saved
-versions again.
+Ever wish to go back to an older saved version of a file? Then this package
+is for you. This package copies every file you save in Emacs to a backup
+directory tree (which mirrors the tree structure of the filesystem), with a
+timestamp suffix to make multiple saves of the same file unique. Never lose
+old saved versions again.
 
-To activate globally, place this file in your `load-path`, and add
-the following lines to your init file:
+To activate globally, place this file in your `load-path`, and add the
+following lines to your init file:
 
     (require 'real-backup)
     (global-real-backup-mode 1)
 
-To activate only for individual modes, add the require line as
-above to your init.el and hook like this:
+To activate only for individual modes, add the require line as above to your
+init.el and hook like this:
 
     (add-hook 'python-mode-hook 'real-backup-mode)
 
 
 To filter out which files it backs up, use a custom function for
-`real-backup-filter-function`.  For example, to filter out
-the saving of GPG encypted files, do:
+`real-backup-filename-filter-function`. For example, to filter out the saving
+of GPG encypted files, do:
 
     (defun real-backup-no-gpg-files (filename)
       (not (equal (file-name-extension filename) "gpg")))
-    (setq real-backup-filter-function #'real-backup-no-gpg-files)
+    (setq real-backup-filename-filter-function #'real-backup-no-gpg-files)
 
 ### ChangeLog
 
@@ -70,6 +69,12 @@ the saving of GPG encypted files, do:
   - add `real-backup-open` can now open any backed-up file using step-by-step
   - completion over existing backups
   - add `real-backup-view-mode` with some local bindigs
+- v5.0:
+  - code cleanup
+  - replace `real-backup-global-excluded-modes` with standard predicate `global-real-backup-modes`
+- v5.1:
+  - rename `real-backup-filter-function` to `real-backup-filename-filter-function`
+  - add `real-backup-buffer-filter-function` with default value that skips temporary buffers
 
 
 
@@ -86,13 +91,15 @@ Whether to backup remote files.
 
 When non-nil, remote files will be saved locally.
 
-#### `real-backup-filter-function`
+#### `real-backup-filename-filter-function`
 
 Function which should return non-nil if the file should be backed up.
 
-#### `real-backup-global-excluded-modes`
+#### `real-backup-buffer-filter-function`
 
-A list of modes to be excluded when enabling globally.
+Function which should return non-nil if a buffer should be backed up.
+
+This function is called from `before-save-hook`.
 
 #### `real-backup-size-limit`
 
@@ -148,7 +155,15 @@ previously previewed candidate and the current one.
 
 ### Function and Macro Documentation
 
-#### `(real-backup)`
+#### `(real-backup-save-buffer-p BUFFER)`
+
+Return nil when BUFFER is a temporary buffer.
+
+#### `(real-backup-before-save)`
+
+A hook to run in `before-save-hook`.
+
+#### `(real-backup-after-save)`
 
 Perform a backup of the current file if needed.
 
