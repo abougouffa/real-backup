@@ -7,7 +7,7 @@
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Modified: May 29, 2026
 ;; Keywords: files, convenience
-;; Version: 5.2
+;; Version: 5.3
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "29.1"))
 
