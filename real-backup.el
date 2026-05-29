@@ -119,6 +119,7 @@ When non-nil, remote files will be saved locally."
   :group 'real-backup
   :type 'function)
 
+;; TODO: Remove in v6.0
 (define-obsolete-variable-alias 'real-backup-filter-function 'real-backup-filename-filter-function "5.1")
 
 (defcustom real-backup-buffer-filter-function #'real-backup-save-buffer-p
@@ -196,6 +197,7 @@ previously previewed candidate and the current one."
   :group 'real-backup
   :type 'boolean)
 
+;; TODO: Remove in v6.0
 (defvar real-backup-global-excluded-modes nil)
 (make-obsolete-variable 'real-backup-global-excluded-modes 'global-real-backup-modes "5.0")
 
@@ -442,6 +444,7 @@ path."
            (selected (completing-read "File: " originals nil t)))
       selected)))
 
+;; TODO: Remove in v6.0
 ;;;###autoload
 (define-obsolete-function-alias 'real-backup-open-backup 'real-backup-open "3.4" "Open a backup of FILENAME or the current buffer.")
 
