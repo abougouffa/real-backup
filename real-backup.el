@@ -5,7 +5,7 @@
 
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
-;; Modified: May 29, 2026
+;; Modified: May 30, 2026
 ;; Keywords: files, convenience
 ;; Version: 5.3
 ;; URL: https://github.com/abougouffa/real-backup
@@ -561,8 +561,8 @@ or yesterday's (?y) backups."
             (when (and diff-buf (buffer-live-p diff-buf))
               (kill-buffer diff-buf))
             ;; Restore the original window layout
-            (set-window-configuration wconfig))))
-    (backup-file (alist-get selected backup-files nil nil #'equal))
+            (set-window-configuration wconfig))
+          (backup-file (alist-get selected backup-files nil nil #'equal))))
     (if backup-file
         (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
           (funcall orig-mode)
