@@ -75,6 +75,10 @@ of GPG encypted files, do:
 - v5.1:
   - rename `real-backup-filter-function` to `real-backup-filename-filter-function`
   - add `real-backup-buffer-filter-function` with default value that skips temporary buffers
+- v5.2:
+  - fix `real-backup-cleanup` which wasn't cleaning
+- v5.3:
+  - Prefer `consult` in `real-backup-open`, with narrowing options `t` for today's backup, and `y` for yesterday's
 
 
 
@@ -172,9 +176,9 @@ Perform a backup of the current file if needed.
 Compute backup location for FILENAME.
 When UNIQUE is provided, add a unique timestamp after the file name.
 
-#### `(real-backup-backups-of-file FILENAME)`
+#### `(real-backup-backups-of-file FILENAME &optional FULL)`
 
-Sorted list of backups for FILENAME.
+Sorted list of backups for FILENAME, return absolete path when FULL is non-nil.
 
 #### `(real-backup-cleanup FILENAME)`
 
@@ -183,6 +187,8 @@ Cleanup backups of FILENAME, keeping `real-backup-cleanup-keep` copies.
 #### `(real-backup-open FILENAME)`
 
 Open a backup of FILENAME, current buffer or arbitrary backup when called with prefix arg.
+When `consult` is available, completion supports narrowing to today's (?t)
+or yesterday's (?y) backups.
 
 #### `(real-backup-restore)`
 
