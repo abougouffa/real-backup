@@ -5,7 +5,7 @@
 
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
-;; Modified: May 23, 2026
+;; Modified: May 29, 2026
 ;; Keywords: files, convenience
 ;; Version: 5.2
 ;; URL: https://github.com/abougouffa/real-backup
@@ -85,6 +85,8 @@
 ;;   - add `real-backup-buffer-filter-function' with default value that skips temporary buffers
 ;; - v5.2:
 ;;   - fix `real-backup-cleanup' which wasn't cleaning
+;; - v5.3:
+;;   - Prefer `consult' in `real-backup-open', with narrowing options `t' for today's backup, and `y' for yesterday's
 
 
 ;;; Code:
@@ -93,6 +95,8 @@
 (autoload 'string-remove-prefix "subr-x")
 (autoload 'diff-no-select "diff")
 (autoload 'with-auto-compression-mode "jka-cmpr-hook")
+(declare-function consult--read "consult")
+(defvar consult--narrow)
 
 (defgroup real-backup nil
   "Real Backup."
@@ -198,6 +202,8 @@ previously previewed candidate and the current one."
 (defconst real-backup--time-format "%Y-%m-%d-%H-%M-%S"
   "Format given to `format-time-string' which is appended to the filename.")
 
+(defconst real-backup--seconds-per-day (* 24 60 60) "Number of seconds in a day.")
+
 (defconst real-backup--time-match-regexp "[[:digit:]]\\{4\\}\\(-[[:digit:]]\\{2\\}\\)\\{5\\}"
   "A regexp that matches `real-backup--time-format'.")
 
@@ -288,6 +294,15 @@ When UNIQUE is provided, add a unique timestamp after the file name."
   "Format ORIG-NAME and BACKUP-NAME as a date."
   (let ((timestamp (file-name-sans-extension (string-remove-prefix (concat (file-name-nondirectory orig-name) "#") backup-name))))
     (cons (apply (apply-partially #'format "%s-%s-%s %s:%s:%s") (split-string timestamp "-")) backup-name)))
+
+(defun real-backup--backup-date (backup-name)
+  "Return the YYYY-MM-DD date string for BACKUP-NAME."
+  (save-match-data
+    (when (string-match real-backup--time-match-regexp backup-name)
+      (let* ((timestamp (match-string 0 backup-name))
+             (parts (split-string timestamp "-")))
+        (when (>= (length parts) 3)
+          (format "%s-%s-%s" (nth 0 parts) (nth 1 parts) (nth 2 parts)))))))
 
 ;;;###autoload
 (defun real-backup-cleanup (filename)
@@ -432,7 +447,9 @@ path."
 
 ;;;###autoload
 (defun real-backup-open (filename)
-  "Open a backup of FILENAME, current buffer or arbitrary backup when called with prefix arg."
+  "Open a backup of FILENAME, current buffer or arbitrary backup when called with prefix arg.
+When `consult' is available, completion supports narrowing to today's (?t)
+or yesterday's (?y) backups."
   (interactive (if current-prefix-arg
                    (list (real-backup--ask-for-backup))
                  (list buffer-file-name)))
@@ -454,10 +471,22 @@ path."
                  (real-backup--buffer-string))))
          (last-preview nil)
          (last-preview-content nil)
-         (do-preview
-          (lambda ()
-            (when-let* ((current (real-backup--completing-read-candidate candidates))
-                        (backup-name (cdr (assoc current backup-files))))
+         (consult-available-p (require 'consult nil t))
+         (backup-dates
+          (when consult-available-p
+            (let ((table (make-hash-table :test 'equal)))
+              (dolist (entry backup-files table)
+                (let ((label (car entry))
+                      (date (real-backup--backup-date (cdr entry))))
+                  (when date
+                    (puthash label date table)))))))
+         (today (and consult-available-p (format-time-string "%Y-%m-%d")))
+         (yesterday (and consult-available-p
+                         (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time real-backup--seconds-per-day)))))
+         (preview-candidate
+          (lambda (current)
+            (setq current (substring-no-properties current))
+            (when-let* ((backup-name (cdr (assoc current backup-files))))
               (unless (equal current last-preview)
                 (let ((prev-content last-preview-content))
                   (setq last-preview current)
@@ -480,7 +509,22 @@ path."
                      (if real-backup-preview-diff-against-current-file
                          " (vs. current file)"
                        " (vs. previous candidate)"))))))))
+         (do-preview
+          (lambda ()
+            (when-let* ((current (real-backup--completing-read-candidate candidates)))
+              (funcall preview-candidate current))))
          (wconfig (current-window-configuration))
+         (consult-narrow-config
+          (and consult-available-p
+               (list :keys '((?t . "Today") (?y . "Yesterday"))
+                     :predicate
+                     (lambda (cand)
+                       (let* ((key (substring-no-properties cand))
+                              (date (and backup-dates (gethash key backup-dates))))
+                         (pcase consult--narrow
+                           (?t (equal date today))
+                           (?y (equal date yesterday))
+                           (_ t)))))))
          (selected
           (unwind-protect
               (progn
@@ -490,18 +534,32 @@ path."
                 (when (buffer-live-p diff-buf)
                   (window--display-buffer diff-buf (split-window-right) 'reuse))
                 ;; Do completion with preview
-                (minibuffer-with-setup-hook
-                    (lambda () (add-hook 'post-command-hook do-preview nil t))
-                  (let ((vertico-sort-function nil)
-                        (completions-sort nil))
-                    (completing-read "Select version: " candidates nil t))))
+                (let ((vertico-sort-function nil)
+                      (completions-sort nil))
+                  (if consult-available-p
+                      (consult--read
+                       candidates
+                       :prompt "Select version: "
+                       :require-match t
+                       :sort nil
+                       :preview-key 'any
+                       :narrow consult-narrow-config
+                       :state (lambda (action cand)
+                                (pcase action
+                                  ('preview (when cand (funcall preview-candidate cand)))
+                                  (_ nil))))
+                    (minibuffer-with-setup-hook
+                        (lambda () (add-hook 'post-command-hook do-preview nil t))
+                      (completing-read "Select version: " candidates nil t)))))
+            (setq last-preview nil
+                  last-preview-content nil)
             (when (buffer-live-p preview-buf)
               (kill-buffer preview-buf))
             (when (and diff-buf (buffer-live-p diff-buf))
               (kill-buffer diff-buf))
             ;; Restore the original window layout
-            (set-window-configuration wconfig)))
-         (backup-file (alist-get selected backup-files nil nil #'equal)))
+            (set-window-configuration wconfig))))
+    (backup-file (alist-get selected backup-files nil nil #'equal))
     (if backup-file
         (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
           (funcall orig-mode)
