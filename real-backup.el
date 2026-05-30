@@ -476,8 +476,9 @@ or yesterday's (?y) backups."
                             (date (car (string-split (car entry)))))
                   (puthash label date table))))))
          (today (and consult-available-p (format-time-string "%Y-%m-%d")))
-         (yesterday (and consult-available-p
-                         (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time real-backup--seconds-per-day)))))
+         (yesterday (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time real-backup--seconds-per-day)))))
+         (week (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time (* 7 real-backup--seconds-per-day))))))
+         (month (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time (* 30 real-backup--seconds-per-day))))))
          (preview-candidate
           (lambda (current)
             (setq current (substring-no-properties current))
@@ -511,7 +512,7 @@ or yesterday's (?y) backups."
          (wconfig (current-window-configuration))
          (consult-narrow-config
           (and consult-available-p
-               (list :keys '((?t . "Today") (?y . "Yesterday"))
+               (list :keys '((?t . "Today") (?y . "Yesterday") (?w . "Last week") (?m . "Last month (last 30 days)"))
                      :predicate
                      (lambda (cand)
                        (let* ((key (substring-no-properties cand))
@@ -519,6 +520,8 @@ or yesterday's (?y) backups."
                          (pcase consult--narrow
                            (?t (equal date today))
                            (?y (equal date yesterday))
+                           (?w (string> date week))
+                           (?m (string> date month))
                            (_ t)))))))
          (selected
           (unwind-protect
