@@ -115,7 +115,9 @@ When non-nil, remote files will be saved locally."
   :type 'boolean)
 
 (defcustom real-backup-filename-filter-function #'identity
-  "Function which should return non-nil if the file should be backed up."
+  "Function which should return non-nil if the file should be backed up.
+
+This function is called from `after-save-hook'."
   :group 'real-backup
   :type 'function)
 
