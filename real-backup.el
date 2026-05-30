@@ -5,7 +5,7 @@
 
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
-;; Modified: May 30, 2026
+;; Modified: May 31, 2026
 ;; Keywords: files, convenience
 ;; Version: 5.3
 ;; URL: https://github.com/abougouffa/real-backup
@@ -297,15 +297,6 @@ When UNIQUE is provided, add a unique timestamp after the file name."
   (let ((timestamp (file-name-sans-extension (string-remove-prefix (concat (file-name-nondirectory orig-name) "#") backup-name))))
     (cons (apply (apply-partially #'format "%s-%s-%s %s:%s:%s") (split-string timestamp "-")) backup-name)))
 
-(defun real-backup--backup-date (backup-name)
-  "Return the YYYY-MM-DD date string for BACKUP-NAME."
-  (save-match-data
-    (when (string-match real-backup--time-match-regexp backup-name)
-      (let* ((timestamp (match-string 0 backup-name))
-             (parts (split-string timestamp "-")))
-        (when (>= (length parts) 3)
-          (format "%s-%s-%s" (nth 0 parts) (nth 1 parts) (nth 2 parts)))))))
-
 ;;;###autoload
 (defun real-backup-cleanup (filename)
   "Cleanup backups of FILENAME, keeping `real-backup-cleanup-keep' copies."
@@ -479,10 +470,9 @@ or yesterday's (?y) backups."
           (when consult-available-p
             (let ((table (make-hash-table :test 'equal)))
               (dolist (entry backup-files table)
-                (let ((label (car entry))
-                      (date (real-backup--backup-date (cdr entry))))
-                  (when date
-                    (puthash label date table)))))))
+                (when-let* ((label (car entry))
+                            (date (car (string-split (car entry)))))
+                  (puthash label date table))))))
          (today (and consult-available-p (format-time-string "%Y-%m-%d")))
          (yesterday (and consult-available-p
                          (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time real-backup--seconds-per-day)))))
