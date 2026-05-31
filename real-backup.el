@@ -7,7 +7,7 @@
 ;; Maintainer: Abdelhak BOUGOUFFA
 ;; Modified: May 31, 2026
 ;; Keywords: files, convenience
-;; Version: 5.3
+;; Version: 5.4
 ;; URL: https://github.com/abougouffa/real-backup
 ;; Package-Requires: ((emacs "29.1"))
 
@@ -87,6 +87,10 @@
 ;;   - fix `real-backup-cleanup' which wasn't cleaning
 ;; - v5.3:
 ;;   - Prefer `consult' in `real-backup-open', with narrowing options `t' for today's backup, and `y' for yesterday's
+;; - v5.4:
+;;   - Add consult narrowing keys for week (`w') and month (`m')
+;;   - code refactoring
+;;   - fix a fatal bug in `real-backup-open'
 
 
 ;;; Code:
