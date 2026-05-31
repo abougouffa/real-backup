@@ -79,6 +79,10 @@ of GPG encypted files, do:
   - fix `real-backup-cleanup` which wasn't cleaning
 - v5.3:
   - Prefer `consult` in `real-backup-open`, with narrowing options `t` for today's backup, and `y` for yesterday's
+- v5.4:
+  - Add consult narrowing keys for week (`w`) and month (`m`)
+  - code refactoring
+  - fix a fatal bug in `real-backup-open`
 
 
 
@@ -98,6 +102,8 @@ When non-nil, remote files will be saved locally.
 #### `real-backup-filename-filter-function`
 
 Function which should return non-nil if the file should be backed up.
+
+This function is called from `after-save-hook`.
 
 #### `real-backup-buffer-filter-function`
 
