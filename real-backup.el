@@ -5,7 +5,7 @@
 
 ;; Author: Abdelhak BOUGOUFFA
 ;; Maintainer: Abdelhak BOUGOUFFA
-;; Modified: May 31, 2026
+;; Modified: June 01, 2026
 ;; Keywords: files, convenience
 ;; Version: 5.4
 ;; URL: https://github.com/abougouffa/real-backup
@@ -296,7 +296,8 @@ When UNIQUE is provided, add a unique timestamp after the file name."
   "Sorted list of backups for FILENAME, return absolete path when FULL is non-nil."
   (let* ((backup-filename (real-backup-compute-location filename))
          (backup-dir (file-name-directory backup-filename)))
-    (directory-files backup-dir full (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$"))))
+    (when (file-directory-p backup-dir)
+      (directory-files backup-dir full (concat "^" (regexp-quote (file-name-nondirectory backup-filename)) "#" real-backup--time-match-regexp "\\(\\.[[:alnum:]]+\\)?" "$")))))
 
 (defun real-backup--format-as-date (orig-name backup-name)
   "Format ORIG-NAME and BACKUP-NAME as a date."
@@ -460,120 +461,122 @@ or yesterday's (?y) backups."
          (orig-buf (current-buffer))
          (backup-dir (file-name-directory (real-backup-compute-location filename)))
          (backup-files (mapcar (apply-partially #'real-backup--format-as-date filename)
-                               (real-backup-backups-of-file filename)))
-         (candidates (reverse (mapcar #'car backup-files)))
-         (preview-buf (get-buffer-create " *real-backup-preview*"))
-         (diff-buf (and real-backup-preview-show-diff (get-buffer-create " *real-backup-diff*")))
-         (current-file-content
-          (and diff-buf real-backup-preview-diff-against-current-file
-               (with-temp-buffer
-                 (insert-file-contents filename)
-                 (real-backup--buffer-string))))
-         (last-preview nil)
-         (last-preview-content nil)
-         (consult-available-p (require 'consult nil t))
-         (backup-dates
-          (when consult-available-p
-            (let ((table (make-hash-table :test 'equal)))
-              (dolist (entry backup-files table)
-                (when-let* ((label (car entry))
-                            (date (car (string-split (car entry)))))
-                  (puthash label date table))))))
-         (today (and consult-available-p (format-time-string "%Y-%m-%d")))
-         (yesterday (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time real-backup--seconds-per-day)))))
-         (week (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time (* 7 real-backup--seconds-per-day))))))
-         (month (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time (* 30 real-backup--seconds-per-day))))))
-         (preview-candidate
-          (lambda (current)
-            (setq current (substring-no-properties current))
-            (when-let* ((backup-name (cdr (assoc current backup-files))))
-              (unless (equal current last-preview)
-                (let ((prev-content last-preview-content))
-                  (setq last-preview current)
-                  (setq last-preview-content
-                        (real-backup--show-preview
-                         backup-name backup-dir orig-mode preview-buf
-                         (format "--- Preview: Real Backup of %s @ %s %%-"
-                                 (file-name-nondirectory filename) current)
-                         prev-content))
-                  ;; Show the diff only when we have content to display, and either we're
-                  ;; diffing against the current file (always available) or we have a
-                  ;; previous candidate to compare against (not available on the first pick).
-                  (when (and diff-buf last-preview-content
-                             (or real-backup-preview-diff-against-current-file prev-content))
-                    (real-backup--show-diff-preview
-                     (if real-backup-preview-diff-against-current-file
-                         current-file-content
-                       prev-content)
-                     last-preview-content diff-buf filename
-                     (if real-backup-preview-diff-against-current-file
-                         " (vs. current file)"
-                       " (vs. previous candidate)"))))))))
-         (do-preview
-          (lambda ()
-            (when-let* ((current (real-backup--completing-read-candidate candidates)))
-              (funcall preview-candidate current))))
-         (wconfig (current-window-configuration))
-         (consult-narrow-config
-          (and consult-available-p
-               (list :keys '((?t . "Today") (?y . "Yesterday") (?w . "Last week") (?m . "Last month (last 30 days)"))
-                     :predicate
-                     (lambda (cand)
-                       (let* ((key (substring-no-properties cand))
-                              (date (and backup-dates (gethash key backup-dates))))
-                         (pcase consult--narrow
-                           (?t (equal date today))
-                           (?y (equal date yesterday))
-                           (?w (string> date week))
-                           (?m (string> date month))
-                           (_ t)))))))
-         (selected
-          (unwind-protect
-              (progn
-                ;; Setup the preview and diff window if enabled
-                (delete-other-windows)
-                (window--display-buffer preview-buf (selected-window) 'reuse)
-                (when (buffer-live-p diff-buf)
-                  (window--display-buffer diff-buf (split-window-right) 'reuse))
-                ;; Do completion with preview
-                (let ((vertico-sort-function nil)
-                      (completions-sort nil))
-                  (if consult-available-p
-                      (consult--read
-                       candidates
-                       :prompt "Select version: "
-                       :require-match t
-                       :sort nil
-                       :preview-key 'any
-                       :narrow consult-narrow-config
-                       :state (lambda (action cand)
-                                (pcase action
-                                  ('preview (when cand (funcall preview-candidate cand)))
-                                  (_ nil))))
-                    (minibuffer-with-setup-hook
-                        (lambda () (add-hook 'post-command-hook do-preview nil t))
-                      (completing-read "Select version: " candidates nil t)))))
-            (setq last-preview nil
-                  last-preview-content nil)
-            (when (buffer-live-p preview-buf)
-              (kill-buffer preview-buf))
-            (when (and diff-buf (buffer-live-p diff-buf))
-              (kill-buffer diff-buf))
-            ;; Restore the original window layout
-            (set-window-configuration wconfig)))
-         (backup-file (alist-get selected backup-files nil nil #'equal)))
-    (if backup-file
-        (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
-          (funcall orig-mode)
-          (setq-local default-directory orig-dir)
-          (when real-backup-show-header
-            (setq header-line-format
-                  (propertize (format "--- Real Backup of file %s @ %s %%-"
-                                      (file-name-nondirectory filename)
-                                      (car (real-backup--format-as-date filename backup-file)))
-                              'face 'warning)))
-          (real-backup-view-mode 1))
-      (user-error "No backup version selected"))))
+                               (real-backup-backups-of-file filename))))
+    (if backup-files
+        (let* ((candidates (reverse (mapcar #'car backup-files)))
+               (preview-buf (get-buffer-create " *real-backup-preview*"))
+               (diff-buf (and real-backup-preview-show-diff (get-buffer-create " *real-backup-diff*")))
+               (current-file-content
+                (and diff-buf real-backup-preview-diff-against-current-file
+                     (with-temp-buffer
+                       (insert-file-contents filename)
+                       (real-backup--buffer-string))))
+               (last-preview nil)
+               (last-preview-content nil)
+               (consult-available-p (require 'consult nil t))
+               (backup-dates
+                (when consult-available-p
+                  (let ((table (make-hash-table :test 'equal)))
+                    (dolist (entry backup-files table)
+                      (when-let* ((label (car entry))
+                                  (date (car (string-split (car entry)))))
+                        (puthash label date table))))))
+               (today (and consult-available-p (format-time-string "%Y-%m-%d")))
+               (yesterday (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time real-backup--seconds-per-day)))))
+               (week (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time (* 7 real-backup--seconds-per-day))))))
+               (month (and consult-available-p (format-time-string "%Y-%m-%d" (time-subtract (current-time) (seconds-to-time (* 30 real-backup--seconds-per-day))))))
+               (preview-candidate
+                (lambda (current)
+                  (setq current (substring-no-properties current))
+                  (when-let* ((backup-name (cdr (assoc current backup-files))))
+                    (unless (equal current last-preview)
+                      (let ((prev-content last-preview-content))
+                        (setq last-preview current)
+                        (setq last-preview-content
+                              (real-backup--show-preview
+                               backup-name backup-dir orig-mode preview-buf
+                               (format "--- Preview: Real Backup of %s @ %s %%-"
+                                       (file-name-nondirectory filename) current)
+                               prev-content))
+                        ;; Show the diff only when we have content to display, and either we're
+                        ;; diffing against the current file (always available) or we have a
+                        ;; previous candidate to compare against (not available on the first pick).
+                        (when (and diff-buf last-preview-content
+                                   (or real-backup-preview-diff-against-current-file prev-content))
+                          (real-backup--show-diff-preview
+                           (if real-backup-preview-diff-against-current-file
+                               current-file-content
+                             prev-content)
+                           last-preview-content diff-buf filename
+                           (if real-backup-preview-diff-against-current-file
+                               " (vs. current file)"
+                             " (vs. previous candidate)"))))))))
+               (do-preview
+                (lambda ()
+                  (when-let* ((current (real-backup--completing-read-candidate candidates)))
+                    (funcall preview-candidate current))))
+               (wconfig (current-window-configuration))
+               (consult-narrow-config
+                (and consult-available-p
+                     (list :keys '((?t . "Today") (?y . "Yesterday") (?w . "Last week") (?m . "Last month (last 30 days)"))
+                           :predicate
+                           (lambda (cand)
+                             (let* ((key (substring-no-properties cand))
+                                    (date (and backup-dates (gethash key backup-dates))))
+                               (pcase consult--narrow
+                                 (?t (equal date today))
+                                 (?y (equal date yesterday))
+                                 (?w (string> date week))
+                                 (?m (string> date month))
+                                 (_ t)))))))
+               (selected
+                (unwind-protect
+                    (progn
+                      ;; Setup the preview and diff window if enabled
+                      (delete-other-windows)
+                      (window--display-buffer preview-buf (selected-window) 'reuse)
+                      (when (buffer-live-p diff-buf)
+                        (window--display-buffer diff-buf (split-window-right) 'reuse))
+                      ;; Do completion with preview
+                      (let ((vertico-sort-function nil)
+                            (completions-sort nil))
+                        (if consult-available-p
+                            (consult--read
+                             candidates
+                             :prompt "Select version: "
+                             :require-match t
+                             :sort nil
+                             :preview-key 'any
+                             :narrow consult-narrow-config
+                             :state (lambda (action cand)
+                                      (pcase action
+                                        ('preview (when cand (funcall preview-candidate cand)))
+                                        (_ nil))))
+                          (minibuffer-with-setup-hook
+                              (lambda () (add-hook 'post-command-hook do-preview nil t))
+                            (completing-read "Select version: " candidates nil t)))))
+                  (setq last-preview nil
+                        last-preview-content nil)
+                  (when (buffer-live-p preview-buf)
+                    (kill-buffer preview-buf))
+                  (when (and diff-buf (buffer-live-p diff-buf))
+                    (kill-buffer diff-buf))
+                  ;; Restore the original window layout
+                  (set-window-configuration wconfig)))
+               (backup-file (alist-get selected backup-files nil nil #'equal)))
+          (if backup-file
+              (with-current-buffer (find-file (expand-file-name backup-file backup-dir))
+                (funcall orig-mode)
+                (setq-local default-directory orig-dir)
+                (when real-backup-show-header
+                  (setq header-line-format
+                        (propertize (format "--- Real Backup of file %s @ %s %%-"
+                                            (file-name-nondirectory filename)
+                                            (car (real-backup--format-as-date filename backup-file)))
+                                    'face 'warning)))
+                (real-backup-view-mode 1))
+            (user-error "No backup version selected")))
+      (message "There is no backups of this file"))))
 
 (defvar real-backup-view-mode-map
   (define-keymap
